@@ -44,6 +44,14 @@ public class Polytope implements Comparable<Polytope>, Cloneable {
    */
   protected boolean closed = false;
   
+  // Avoid cumulative transformation errors
+  private Map<Polytope, Point> referenceCoordinates = new IdentityHashMap<Polytope, Point>();
+  private AffineTransform transformFromReference = new AffineTransform();
+  
+  //  Attributes used for solved polytypes
+  int id = -1;
+  String name = "";
+  
   /**
    * Construct an empty n-polytope
    * @param n Dimensionality
@@ -839,4 +847,10 @@ private void assertEquals(int i1, int i2) {
     }
     translate(c);
   }
+public void setName(String name) {
+	this.name = name;
+}
+public void setId(int id) {
+	this.id = id;
+}
 }

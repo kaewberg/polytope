@@ -285,8 +285,8 @@ public class TestPolytope {
     Polytope simplex = Polytope.getEmpty(4);
     simplex.add(c1);
     Polytope c2 = simplex.copyAndRotate(c1, f1, SIMPLEX_ANGLE);
-    Polytope c3 = simplex.copyAndRotate(c1, f1, SIMPLEX_ANGLE);
-    Polytope c4 = simplex.copyAndRotate(c1, f1, SIMPLEX_ANGLE);
+    Polytope c3 = simplex.copyAndRotate(c1, f2, SIMPLEX_ANGLE);
+    Polytope c4 = simplex.copyAndRotate(c1, f3, SIMPLEX_ANGLE);
     Polytope c5 = simplex.close();
     simplex.center();
     simplex.scale(200, 200, 200, 200);
