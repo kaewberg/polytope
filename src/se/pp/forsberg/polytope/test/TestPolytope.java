@@ -8,14 +8,11 @@ import static se.pp.forsberg.polytope.AffineTransform.Z;
 
 import java.awt.BorderLayout;
 import java.awt.HeadlessException;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.geom.NoninvertibleTransformException;
 import java.awt.geom.Point2D;
 
 import javax.swing.BorderFactory;
 import javax.swing.JFrame;
-import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
@@ -26,12 +23,17 @@ import se.pp.forsberg.polytope.Edge;
 import se.pp.forsberg.polytope.Point;
 import se.pp.forsberg.polytope.Polytope;
 import se.pp.forsberg.polytope.Vertex;
+import se.pp.forsberg.polytope.swing.AnimatedPolytopeModel;
+import se.pp.forsberg.polytope.swing.BasicPolytopeModel;
+import se.pp.forsberg.polytope.swing.JPolytope;
+import se.pp.forsberg.polytope.swing.PolytopeModel;
+import se.pp.forsberg.polytope.swing.SpinningPolytopeModel;
 
 public class TestPolytope {
   
   public static void main(String[] args) {
     try {
-      testSimplex();
+      testAnimation();
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -118,38 +120,22 @@ public class TestPolytope {
     System.out.println(cube);
   }
   
-  private static void show(final Polytope p) throws HeadlessException, ClassNotFoundException, InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
-    
+  private static void show(Polytope p) throws HeadlessException, ClassNotFoundException, InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
+    show(new BasicPolytopeModel(p));
+  }
+  private static void show(final PolytopeModel model) throws HeadlessException, ClassNotFoundException, InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
     JFrame frame = new JFrame() {
       private static final long serialVersionUID = 1L;
-      private final AffineTransform transform;
-      private final PolytopeModel polytope = new PolytopeModel(p);
       {
-        transform = AffineTransform.getIdentityTransform();
-        double v = 0.0013;
-        for (int d1 = 0; d1 < p.getDimensions()-1; d1++) {
-          for (int d2 = d1+1; d2 < p.getDimensions(); d2++) {
-            for (int i = 0; i < p.getDimensions()-1; i++) {
-              transform.rotate(d1, d2, v);
-              v += 0.0003;
-            }
-          }
-        }
-        
         UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        JPolytope jP = new JPolytope(polytope);
+        //JPolytope jP = new JPolytope(new SpinningPolytopeModel(model));
+        JPolytope jP = new JPolytope(model);
         jP.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         getContentPane().add(jP, BorderLayout.CENTER);
         setTitle("Test polytopes");
         pack();
         setLocationRelativeTo(null);
-        new Timer(20, new ActionListener() {
-          @Override
-          public void actionPerformed(ActionEvent arg0) {
-            polytope.transform(transform);
-          }
-        }).start();
       }
     };
     frame.setVisible(true);
@@ -263,37 +249,43 @@ public class TestPolytope {
     tesseract.scale(200, 200, 200, 200);
     show(tesseract);
   }
-  static void testSimplex() throws HeadlessException, ClassNotFoundException, InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
-    final double TRIANGLE_ANGLE = Math.acos(1/2);
-    final double TETRAHEDRON_ANGLE = Math.acos(1/3);
-    final double SIMPLEX_ANGLE = Math.acos(1/4);
+  static void testAnimation() throws HeadlessException, ClassNotFoundException, InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
+    final double TRIANGLE_ANGLE = Math.acos(1.0/2);
+    final double TETRAHEDRON_ANGLE = Math.acos(1.0/3);
+    final double SIMPLEX_ANGLE = Math.acos(1.0/4);
     
-    Vertex v1 = Polytope.get(0, 0);
-    Vertex v2 = Polytope.get(1, 0);
-    Edge e1 = (Edge) Polytope.get(v1, v2); // (0,0)-(1,0)
+    PolytopeModel p = new AnimatedPolytopeModel();
+    //PolytopeModel p = new BasicPolytopeModel();
+    show(p);
+
     Polytope f1 = Polytope.getEmpty(2);
-    f1.add(e1);
-    Edge e2 = (Edge) f1.copyAndRotate(e1, v1, TRIANGLE_ANGLE);
-    Edge e3 = (Edge) f1.close();
+    p.setPolytope(f1);
+    
+    Vertex v1 = Polytope.get(-100, 0);
+    Vertex v2 = Polytope.get(100, 0);
+    Edge e1 = (Edge) Polytope.get(v1, v2);
+    p.add(e1);
+    Edge e2 = (Edge) p.copyAndRotate(e1, v1, TRIANGLE_ANGLE);
+    Edge e3 = (Edge) p.close();
     
     Polytope c1 = Polytope.getEmpty(3);
     c1.add(f1);
-    Polytope f2 = c1.copyAndRotate(f1, e1, TETRAHEDRON_ANGLE);
-    Polytope f3 = c1.copyAndRotate(f1, e2, TETRAHEDRON_ANGLE);
-    Polytope f4 = c1.close();
+    p.setPolytope(c1);
+    Polytope f2 = p.copyAndRotate(f1, e1, TETRAHEDRON_ANGLE);
+    Polytope f3 = p.copyAndRotate(f1, e2, TETRAHEDRON_ANGLE);
+    Polytope f4 = p.close();
     
     Polytope simplex = Polytope.getEmpty(4);
     simplex.add(c1);
-    Polytope c2 = simplex.copyAndRotate(c1, f1, SIMPLEX_ANGLE);
-    Polytope c3 = simplex.copyAndRotate(c1, f1, SIMPLEX_ANGLE);
-    Polytope c4 = simplex.copyAndRotate(c1, f1, SIMPLEX_ANGLE);
-    Polytope c5 = simplex.close();
+    p.setPolytope(simplex);
+    Polytope c2 = p.copyAndRotate(c1, f1, SIMPLEX_ANGLE);
+    Polytope c3 = p.copyAndRotate(c1, f1, SIMPLEX_ANGLE);
+    Polytope c4 = p.copyAndRotate(c1, f1, SIMPLEX_ANGLE);
+    Polytope c5 = p.close();
     simplex.center();
-    simplex.scale(200, 200, 200, 200);
-    show(simplex);
     
   }
-  
+
   @Test
   public void testIdentityTransform() {
     java.awt.geom.AffineTransform t1 = new java.awt.geom.AffineTransform();
