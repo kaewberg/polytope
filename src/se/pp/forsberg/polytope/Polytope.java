@@ -10,8 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static se.pp.forsberg.polytope.AffineTransform.Y;
-
 /**
  * Polytope: a N-dimensional generalization of polygons/polyhedrons.
  * 
@@ -261,9 +259,10 @@ public class Polytope implements Comparable<Polytope>, Cloneable {
    * @return The new facet will be added and returned 
    */
   public Polytope copyAndRotate(Polytope facetToCopy, Polytope ridge, double angle) {
-    Set<Polytope> ridgeParts = new IdentityHashSet<Polytope>();
-    ridge.collectAllPolytopes(ridgeParts);
-    Polytope facet = facetToCopy.cloneExcept(ridgeParts);
+//    Set<Polytope> ridgeParts = new IdentityHashSet<Polytope>();
+//    ridge.collectAllPolytopes(ridgeParts);
+//    Polytope facet = facetToCopy.cloneExcept(ridgeParts);
+    Polytope facet = facetToCopy.cloneExcept(ridge);
     facet.rotate(ridge, angle);
     add(facet);
     coalesce();
@@ -306,28 +305,28 @@ public class Polytope implements Comparable<Polytope>, Cloneable {
     }
     return angle;
   }
-  private boolean handedness(Polytope facet) {
-    double center[] = new double[n];
-    Set<Vertex> vertices = getVertices();
-    for (Vertex vertex: vertices) {
-      for (int i = 0; i < center.length; i++) {
-        center[i] += vertex.getCoordinates().getCoordinate(i) / vertices.size();
-      }
-    }
-    double distances[] = new double[n];
-    for (Vertex vertex: facet.getVertices()) {
-      for (int i = 0; i < distances.length; i++) {
-        distances[i] += center[i] - vertex.getCoordinates().getCoordinate(i);
-      }
-    }
-    boolean result = true;
-    for (int i = 0; i < distances.length; i++) {
-      if (distances[i] < -EPSILON) {
-        result = !result;
-      }
-    }
-    return result;
-  }
+//  private boolean handedness(Polytope facet) {
+//    double center[] = new double[n];
+//    Set<Vertex> vertices = getVertices();
+//    for (Vertex vertex: vertices) {
+//      for (int i = 0; i < center.length; i++) {
+//        center[i] += vertex.getCoordinates().getCoordinate(i) / vertices.size();
+//      }
+//    }
+//    double distances[] = new double[n];
+//    for (Vertex vertex: facet.getVertices()) {
+//      for (int i = 0; i < distances.length; i++) {
+//        distances[i] += center[i] - vertex.getCoordinates().getCoordinate(i);
+//      }
+//    }
+//    boolean result = true;
+//    for (int i = 0; i < distances.length; i++) {
+//      if (distances[i] < -EPSILON) {
+//        result = !result;
+//      }
+//    }
+//    return result;
+//  }
   private void collectAllPolytopes(Set<Polytope> result) {
     result.add(this);
     for (Polytope facet: facets) {
@@ -837,15 +836,31 @@ private void assertEquals(int i1, int i2) {
     return new Vertex();
   }
   public void center() {
+    double[] mid = midpoint().getCoordinates();
+    double c[] = new double[mid.length];
+    for (int d = 0; d < mid.length; d++) {
+      c[d] -= mid[d];
+    }
+    translate(c);
+  }
+  public Polytope cloneExcept(Polytope ridge) {
+    Set<Polytope> ridgeParts = new HashSet<Polytope>();
+    ridge.collectAllPolytopes(ridgeParts);
+    return cloneExcept(ridgeParts);
+  }
+  public boolean isEmpty() {
+    return facets.isEmpty();
+  }
+  public Point midpoint() {
     Set<Vertex> vertices = getVertices();
     int n = vertices.size();
     double c[] = new double[n];
     for (Vertex vertex: vertices) {
       for (int d = 0; d < n; d++) {
-        c[d] -= vertex.getCoordinates().getCoordinate(d) / n;
+        c[d] += vertex.getCoordinates().getCoordinate(d) / n;
       }
     }
-    translate(c);
+    return new Point(c);
   }
 public void setName(String name) {
 	this.name = name;

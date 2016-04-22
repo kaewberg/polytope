@@ -1,0 +1,114 @@
+Example of combining three polygons f1, f2, f3 around a point (0,0) in diagram:
+
+x1,y1 +--e3-------------+
+      | x2,y2  +        |
+      |      /   \      |
+   e2 |v3   /     \     |
+      |   / e4      \   |
+      |v1/           \  |
+      |/ v2            \| v4
+ 0,0  +-----------------+
+              e1
+
+Join two polygons f1, f2 (square and triangle) around e1.
+Internal angles of the three polygons f1, f2, f3 at point are v1, v2, v3
+Rotate f2 (triangle) v4 around e1
+(x2',y2',z2') = (x2, cos(v4)y2, sin(v4)y2)
+
+Angle between (0,0) (x1,y1) (x2',y2',z2')
+v3 = acos((P12^2 + P13^2 - P23^2) / (2 * P12 * P13))
+Simplified since two edges (0,0)-(x1,y1), (0,0)-(x2',y2') are unit length
+v3 = acos((2 - (x2'-x1)^2 - (y2'-y1)^2 - z2'^2)/2)
+Select v3 so that third polygon fits.
+
+Example with three squares (cube)
+(x1,y1) = (x2,y2) = (0,1)
+(x2',y2',z2') = (0, cos(v4), sin(v4))
+PI/2 = acos((2 - e3^2)/2)
+0 = 2 - e3^2
+e3^2 = 2
+(cos(v4)-1)^2 + sin(v4)^2 = 2
+cos2(v4) - 2cos(v4) + sin2(v4) = 1
+cos(v4) = 0
+v4 = PI/2
+
+Example with symbols all the way
+v3 = acos((2 - e3^2)/2)
+2cos(v3) = 2 - e3^2
+2 - 2cos(v3) = e3^2
+2 - 2cos(v3) = (x2'-x1)^2 + (y2'-y1)^2 + z2'^2
+2 - 2cos(v3) = x2'^2 - 2x2'x1 + x1^2 + y2'^2 - 2y2'y1 + y1^2 + z2'^2
+2 - 2cos(v3) = x2'^2 - 2x2'x1 + y2'^2 - 2y2'y1 + z2'^2 + 1
+(x1, y1) = (cos(v1), sin(v1))
+(x2, y2) = (cos(v2), sin(v2))
+(x2',y2',z2') = (cos(v2), cos(v4)sin(v2), sin(v4)sin(v2))
+2 - 2cos(v3) = cos(v2)^2 - 2cos(v2)cos(v1) + (cos(v4)sin(v2))^2 - 2cos(v4)sin(v2)sin(v1) + (sin(v4)sin(v2))^2 + 1
+
+Time for alpha...
+Hm! Alternate form assuming v1, v2, v3 are positive:
+sin(v1)sin(v2)cos(v4) + cos(v1)cos(v2) = cos(v3)
+
+v4 = acos((cos(v3) - cos(v1)cos(v2))/(sin(v1)sin(v2))) 
+
+
+Back to my notation
+v4 = acos((-x2'^2+ 2x2'x1 - y2'^2 + 2y2'y1 - z2'2 - x1^2 -y1^2 + 2)/2)
+v4 = acos((-x1^2 + 2x1x2' - x2'^2 - y1^2 + 2y1y2' - y2'^2  - z2'^2 + 2)/2)
+// cv1 = cos(v1) c2v1 = cos(v1)^2 etc
+result = v4 = acos((-c2v1 + 2*cv1*cv2 - c2v2 - s2v1 + 2*s2v1*cv3*sv2 - c2v3*s2v2 - s2v3*s2v2 + 2)/2)
+result = v4 = acos((2*cv1*cv2 - c2v2 + 2*s2v1*cv3*sv2 - c2v3*s2v2 - s2v3*s2v2 + 1)/2)
+
+We now have one of three space angles (around e1) only in terms of flat angles of surfaces
+To get the others, simply modify v1/v2/v3 (v(n) -> v(((n-1)+1 % 3)+1))
+
+
+
+Now, general case for folding 3 n polytope facets into n+1 polytopes...
+We'll rotate the above so e1 is the ridge containing the least amount of coordinates (y-axis in 2d case, xy plane in 3d, etc)
+
+Join two facets p1, p2 around flattened/nomalized ridge r1.
+Dihedral angles of the three facets p1, p2, p3 at common sub-ridge p0 are v1, v2, v3
+Rotate p2 v4 around r1
+(x2', y2', z2', ..., n2') = (cos(v4)x2, y2, z2, ..., sin(v4)n2)
+Angle between (0,...,0) (x1,...,n1) (x2',...,n2')
+v3 = acos((2 - e3^2)/2)
+2 - 2cos(v3) = e3^2
+2 - 2cos(v3) = (x2'-x1)^2 + (y2'-y1)^2 + ... + n2'^2
+2 - 2cos(v3) = (x2'-x1)^2 + ... + n2'^2
+2 - 2cos(v3) = x2'^2 - 2x2'x1 + x1^2 + ... + n2'^2
+   x1^2 + y1^2 + ... + m^2 = 1
+2 - 2cos(v3) = x2'2 - 2x2'x1 + y2'^2 - 2y2'y1 + ... + n2'^2
+2 - 2cos(v3) = x2cos(v4)^2 - 2x2cos(v4)x1 + y2^2 - 2y2y1 + ... + n2sin(v4)^2
+
+solve 2 - 2cos(v3) = x2cos(v4)^2 - 2x2cos(v4)x1 + a + b + c + d + e + n2sin(v4)^2 for v4
+
+1)
+----------------
+v4 = 2 (pi n-tan^(-1)(sqrt((-2 sqrt(a n2-a x2+b n2-b x2+c n2-c x2+d n2-d x2+e n2-e x2+n2^2+2 n2 cos(v3)-n2 x2-2 n2-2 x2 cos(v3)+x1^2 x2^2+2 x2)-a-b-c-d-e-2 n2-2 cos(v3)+x2+2)/(a+b+c+d+e+2 cos(v3)+2 x1 x2+x2-2))))
+and a+b+c+d+e+2 cos(v3)+2 x1 x2+x2-2!=0
+and sqrt(a n2-a x2+b n2-b x2+c n2-c x2+d n2-d x2+e n2-e x2+n2^2+2 n2 cos(v3)-n2 x2-2 n2-2 x2 cos(v3)+x1^2 x2^2+2 x2)+n2-x1 x2-x2!=0
+and n element Z
+
+2)
+----------------
+v4 = 2 (pi n+tan^(-1)(sqrt((-2 sqrt(a n2-a x2+b n2-b x2+c n2-c x2+d n2-d x2+e n2-e x2+n2^2+2 n2 cos(v3)-n2 x2-2 n2-2 x2 cos(v3)+x1^2 x2^2+2 x2)-a-b-c-d-e-2 n2-2 cos(v3)+x2+2)/(a+b+c+d+e+2 cos(v3)+2 x1 x2+x2-2))))
+            ^ only difference compared to 1)
+and a+b+c+d+e+2 cos(v3)+2 x1 x2+x2-2!=0
+and sqrt(a n2-a x2+b n2-b x2+c n2-c x2+d n2-d x2+e n2-e x2+n2^2+2 n2 cos(v3)-n2 x2-2 n2-2 x2 cos(v3)+x1^2 x2^2+2 x2)+n2-x1 x2-x2!=0
+and n element Z
+
+3)
+----------------
+v4 = 2 (pi n-tan^(-1)(sqrt((+2 sqrt(a n2-a x2+b n2-b x2+c n2-c x2+d n2-d x2+e n2-e x2+n2^2+2 n2 cos(v3)-n2 x2-2 n2-2 x2 cos(v3)+x1^2 x2^2+2 x2)-a-b-c-d-e-2 n2-2 cos(v3)+x2+2)/(a+b+c+d+e+2 cos(v3)+2 x1 x2+x2-2))))
+                            ^ only difference compared to 1)
+and a+b+c+d+e+2 cos(v3)+2 x1 x2+x2-2!=0
+and sqrt(a n2-a x2+b n2-b x2+c n2-c x2+d n2-d x2+e n2-e x2+n2^2+2 n2 cos(v3)-n2 x2-2 n2-2 x2 cos(v3)+x1^2 x2^2+2 x2)-n2+x1 x2+x2!=0
+and n element Z
+
+4)
+----------------
+v4 = 2 (pi n+tan^(-1)(sqrt((2 sqrt(a n2-a x2+b n2-b x2+c n2-c x2+d n2-d x2+e n2-e x2+n2^2+2 n2 cos(v3)-n2 x2-2 n2-2 x2 cos(v3)+x1^2 x2^2+2 x2)-a-b-c-d-e-2 n2-2 cos(v3)+x2+2)/(a+b+c+d+e+2 cos(v3)+2 x1 x2+x2-2))))
+            ^ only difference compared to 3)
+and a+b+c+d+e+2 cos(v3)+2 x1 x2+x2-2!=0
+and sqrt(a n2-a x2+b n2-b x2+c n2-c x2+d n2-d x2+e n2-e x2+n2^2+2 n2 cos(v3)-n2 x2-2 n2-2 x2 cos(v3)+x1^2 x2^2+2 x2)-n2+x1 x2+x2!=0
+and n element Z
