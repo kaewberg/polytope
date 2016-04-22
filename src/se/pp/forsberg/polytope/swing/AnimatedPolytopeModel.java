@@ -1,7 +1,5 @@
 package se.pp.forsberg.polytope.swing;
 
-import javax.swing.SwingUtilities;
-
 import se.pp.forsberg.polytope.AffineTransform;
 import se.pp.forsberg.polytope.Polytope;
 

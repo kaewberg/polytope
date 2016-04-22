@@ -10,8 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static se.pp.forsberg.polytope.AffineTransform.Y;
-
 /**
  * Polytope: a N-dimensional generalization of polygons/polyhedrons.
  * 

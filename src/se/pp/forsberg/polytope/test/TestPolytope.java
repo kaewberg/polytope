@@ -10,6 +10,16 @@ import java.awt.BorderLayout;
 import java.awt.HeadlessException;
 import java.awt.geom.NoninvertibleTransformException;
 import java.awt.geom.Point2D;
+import java.util.List;
+import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterator.OfInt;
+import java.util.Spliterators;
+import java.util.function.IntConsumer;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.StreamSupport;
 
 import javax.swing.BorderFactory;
 import javax.swing.JFrame;
@@ -27,7 +37,6 @@ import se.pp.forsberg.polytope.swing.AnimatedPolytopeModel;
 import se.pp.forsberg.polytope.swing.BasicPolytopeModel;
 import se.pp.forsberg.polytope.swing.JPolytope;
 import se.pp.forsberg.polytope.swing.PolytopeModel;
-import se.pp.forsberg.polytope.swing.SpinningPolytopeModel;
 
 public class TestPolytope {
   
@@ -448,6 +457,107 @@ public class TestPolytope {
     t2.invert();
     assertEqual(getMatrix(t1), getMatrix(t2));
   }
+  
+  @Test
+  public void testEquivalence() {
+    se.pp.forsberg.polytope.solver.Vertex v11 = new se.pp.forsberg.polytope.solver.Vertex();
+    se.pp.forsberg.polytope.solver.Vertex v12 = new se.pp.forsberg.polytope.solver.Vertex();
+    
+    List<Map<se.pp.forsberg.polytope.solver.Polytope, se.pp.forsberg.polytope.solver.Polytope>> eqvs = v11.waysToEquate(v12).collect(Collectors.toList());
+    assertEquals(1, eqvs.size());
+    Map<se.pp.forsberg.polytope.solver.Polytope, se.pp.forsberg.polytope.solver.Polytope> eqv = eqvs.get(0);
+    assertEquals(1, eqv.size());
+    assertEquals(v12, eqv.get(v11));
+
+    se.pp.forsberg.polytope.solver.Vertex v21 = new se.pp.forsberg.polytope.solver.Vertex();
+    se.pp.forsberg.polytope.solver.Vertex v22 = new se.pp.forsberg.polytope.solver.Vertex();
+    se.pp.forsberg.polytope.solver.Edge e11 = new se.pp.forsberg.polytope.solver.Edge(v11, v21);
+    se.pp.forsberg.polytope.solver.Edge e12 = new se.pp.forsberg.polytope.solver.Edge(v12, v22);
+    eqvs = e11.waysToEquate(e12).collect(Collectors.toList());
+    assertEquals(2, eqvs.size());
+    eqvs.stream().forEach(m -> assertEquals(e12, m.get(e11)));
+    
+    se.pp.forsberg.polytope.solver.Vertex v31 = new se.pp.forsberg.polytope.solver.Vertex();
+    se.pp.forsberg.polytope.solver.Vertex v32 = new se.pp.forsberg.polytope.solver.Vertex();
+    se.pp.forsberg.polytope.solver.Edge e21 = new se.pp.forsberg.polytope.solver.Edge(v21, v31);
+    se.pp.forsberg.polytope.solver.Edge e22 = new se.pp.forsberg.polytope.solver.Edge(v22, v32);
+    se.pp.forsberg.polytope.solver.Edge e31 = new se.pp.forsberg.polytope.solver.Edge(v31, v11);
+    se.pp.forsberg.polytope.solver.Edge e32 = new se.pp.forsberg.polytope.solver.Edge(v32, v12);
+    se.pp.forsberg.polytope.solver.Polytope f11 = new se.pp.forsberg.polytope.solver.Polytope(2);
+    se.pp.forsberg.polytope.solver.Polytope f12 = new se.pp.forsberg.polytope.solver.Polytope(2);
+    f11.add(e11); f11.add(e21); f11.add(e31);
+    f12.add(e12); f12.add(e22); f12.add(e32);
+    eqvs = f11.waysToEquate(f12).collect(Collectors.toList());
+    assertEquals(6, eqvs.size());
+    eqvs.stream().forEach(m ->
+      assertEquals(f12, m.get(f11))
+    );
+    
+    se.pp.forsberg.polytope.solver.Vertex v41 = new se.pp.forsberg.polytope.solver.Vertex();
+    se.pp.forsberg.polytope.solver.Vertex v42 = new se.pp.forsberg.polytope.solver.Vertex();
+    se.pp.forsberg.polytope.solver.Edge e41 = new se.pp.forsberg.polytope.solver.Edge(v11, v41);
+    se.pp.forsberg.polytope.solver.Edge e42 = new se.pp.forsberg.polytope.solver.Edge(v12, v42);
+    se.pp.forsberg.polytope.solver.Edge e51 = new se.pp.forsberg.polytope.solver.Edge(v21, v41);
+    se.pp.forsberg.polytope.solver.Edge e52 = new se.pp.forsberg.polytope.solver.Edge(v22, v42);
+    se.pp.forsberg.polytope.solver.Edge e61 = new se.pp.forsberg.polytope.solver.Edge(v31, v41);
+    se.pp.forsberg.polytope.solver.Edge e62 = new se.pp.forsberg.polytope.solver.Edge(v32, v42);
+    se.pp.forsberg.polytope.solver.Polytope f21 = new se.pp.forsberg.polytope.solver.Polytope(2);
+    se.pp.forsberg.polytope.solver.Polytope f22 = new se.pp.forsberg.polytope.solver.Polytope(2);
+    f21.add(e11); f21.add(e41); f21.add(e51);
+    f22.add(e12); f22.add(e42); f22.add(e52);
+    se.pp.forsberg.polytope.solver.Polytope f31 = new se.pp.forsberg.polytope.solver.Polytope(2);
+    se.pp.forsberg.polytope.solver.Polytope f32 = new se.pp.forsberg.polytope.solver.Polytope(2);
+    f31.add(e21); f31.add(e51); f31.add(e61);
+    f32.add(e22); f32.add(e52); f32.add(e62);
+    se.pp.forsberg.polytope.solver.Polytope f41 = new se.pp.forsberg.polytope.solver.Polytope(2);
+    se.pp.forsberg.polytope.solver.Polytope f42 = new se.pp.forsberg.polytope.solver.Polytope(2);
+    f41.add(e31); f41.add(e61); f41.add(e41);
+    f42.add(e32); f42.add(e62); f42.add(e42);
+    se.pp.forsberg.polytope.solver.Polytope tetrahedron1 = new se.pp.forsberg.polytope.solver.Polytope(3);
+    se.pp.forsberg.polytope.solver.Polytope tetrahedron2 = new se.pp.forsberg.polytope.solver.Polytope(3);
+    tetrahedron1.add(f11); tetrahedron1.add(f21); tetrahedron1.add(f31); tetrahedron1.add(f41);
+    tetrahedron2.add(f12); tetrahedron2.add(f22); tetrahedron2.add(f32); tetrahedron2.add(f42);
+    eqvs = tetrahedron1.waysToEquate(tetrahedron2).collect(Collectors.toList());
+    assertEquals(24, eqvs.size());
+    eqvs.stream().forEach(m -> assertEquals(tetrahedron2, m.get(tetrahedron1)));
+  }
+  
+  static Spliterator.OfInt takeWhile(
+      Spliterator.OfInt splitr, Predicate<Integer> predicate) {
+    return new Spliterators.AbstractIntSpliterator(splitr.estimateSize(), 0) {
+      boolean stillGoing = true;
+      @Override public boolean tryAdvance(IntConsumer consumer) {
+        if (stillGoing) {
+          boolean hadNext = splitr.tryAdvance((int elem) -> {
+            if (predicate.test(elem)) {
+              consumer.accept(elem);
+            } else {
+              stillGoing = false;
+            }
+          });
+          return hadNext && stillGoing;
+        }
+        return false;
+      }
+    };
+  }
+  static IntStream takeWhile(IntStream stream, Predicate<Integer> predicate) {
+    return StreamSupport.intStream(takeWhile(stream.spliterator(), predicate), false);
+ }
+
+  
+  public static IntStream from(int start) {
+    int[] i = {start};
+    return IntStream.generate(() -> i[0]++);
+  }
+  public static IntStream primes() {
+    return from(2).filter(n -> !takeWhile(primes(), p -> p < n).anyMatch(p -> n > p && ((n % p) == 0)));
+  }
+  
+  @Test
+  public void testPrimes() {
+    primes().limit(10).forEach(System.out::println);
+   }
 
   private double[] flatten(double[]... arrays) {
     int length = 0;

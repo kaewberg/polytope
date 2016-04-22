@@ -2,6 +2,8 @@ package se.pp.forsberg.polytope.solver;
 
 import static java.lang.Math.*;
 
+import java.util.Map;
+
 // "Exact angles" using symbolic notation
 public abstract class Angle {
   
@@ -60,8 +62,6 @@ public abstract class Angle {
     }
   }
   
-  
-  
   public static class TrinaryAngle extends Angle {
     public interface Value {
       double getValue(double v1, double v2, double v3);
@@ -84,5 +84,34 @@ public abstract class Angle {
     public String toString() {
       return String.format(description, v1, v2, v3);
     }
+    @Override
+    public String toString(Map<Angle, String> angleNames) {
+      String s1 = angleNames.containsKey(v1)? angleNames.get(v1) : v1.toString(angleNames);
+      String s2 = angleNames.containsKey(v2)? angleNames.get(v2) : v2.toString(angleNames);
+      String s3 = angleNames.containsKey(v3)? angleNames.get(v3) : v3.toString(angleNames);
+
+      return String.format(description, s1, s2, s3);
+    }
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof TrinaryAngle)) {
+        return false;
+      }
+      TrinaryAngle other = (TrinaryAngle) obj;
+      return v1.equals(other.v1) && v2.equals(other.v2) && v3.equals(other.v3) && value.equals(other.value);
+    }
+    @Override
+    public int hashCode() {
+      return v1.hashCode() ^ v2.hashCode() ^ v3.hashCode() ^ value.hashCode();
+    }
+  }
+
+  /**
+   * To string using symbolic names of already defined angles
+   * @param angleNames
+   * @return
+   */
+  public String toString(Map<Angle, String> angleNames) {
+    return toString();
   }
 }
