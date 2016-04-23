@@ -4,14 +4,11 @@ import static java.lang.Math.acos;
 import static java.lang.Math.cos;
 import static java.lang.Math.sin;
 
-import java.lang.reflect.ReflectPermission;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
-
-import javax.print.attribute.standard.MediaSize.Other;
 
 import se.pp.forsberg.polytope.solver.Angle.TrinaryAngle;
 
@@ -113,7 +110,8 @@ public class PolytopeSolver {
   private Edge copyEdge() {
     return getEdge().copyEdge();
   }
-  private Polytope copy(String name) {
+  @SuppressWarnings("unused")
+	private Polytope copy(String name) {
     return get(name).copy();
   }
   

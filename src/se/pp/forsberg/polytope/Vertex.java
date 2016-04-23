@@ -60,9 +60,6 @@ public class Vertex extends Polytope {
     if (!(o instanceof Vertex)) {
       return super.compareTo(o);
     }
-    if (o == null) {
-      return -1;
-    }
     Vertex other = (Vertex) o;
     if (coordinates == null) {
       if (other.coordinates == null) {

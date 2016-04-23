@@ -7,8 +7,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Spliterator;
-import java.util.Spliterators.AbstractSpliterator;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -412,8 +410,6 @@ public class Polytope {
   }
   // Find all ways this polytope can be connnected to both specified facets (which must be connected)
   public Stream<Map<Polytope, Polytope>> waysToConnectFacets(Polytope f1, Polytope f2) {
-    // Common ridge f1, f2
-    Polytope ridgeF1F2 = f1.facets.stream().filter(r -> f2.facets.contains(r)).findAny().get();
     // For each facet
     return facets.stream().flatMap(
     // For each neighbor facet

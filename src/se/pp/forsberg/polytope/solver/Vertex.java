@@ -54,7 +54,6 @@ public class Vertex extends Polytope {
   }
   
   protected boolean anchor(Polytope other, Map<Polytope, Polytope> equivalences) {
-    Vertex v = (Vertex) other;
     equivalences.put(this, other);
     return true;
   }
