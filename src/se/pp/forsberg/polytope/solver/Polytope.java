@@ -107,6 +107,10 @@ public class Polytope {
       return replacementMap.get(this);
     }
     Polytope p = new Polytope(n);
+    copyCommon(p, replacementMap);
+    return p;
+  }
+  public void copyCommon(Polytope p, Map<Polytope, Polytope> replacementMap) {
     replacementMap.put(this, p);
     for (Polytope facet: facets) {
       p.facets.add(facet.copy(replacementMap));
@@ -115,7 +119,6 @@ public class Polytope {
       p.ridgeAngles.put(replacementMap.get(ridge), ridgeAngles.get(ridge));
     }
     copyCommon(p);
-    return p;
   }
   protected void copyCommon(Polytope p) {
     p.name = name;
@@ -244,7 +247,7 @@ public class Polytope {
     Map<Polytope, String> names = new HashMap<Polytope, String>();
     
     stringBuilder.append(n).append("-polytope ").append(id).append(' ').append(name)
-      .append('@').append(System.identityHashCode(this))
+      //.append('@').append(System.identityHashCode(this))
       .append('\n');
     Map<Polytope, Set<Polytope>> ridgeToFacetMap = new HashMap<Polytope, Set<Polytope>>();
     for (Polytope facet: facets) {
@@ -291,7 +294,7 @@ public class Polytope {
     if (fullName == null) {
       String name = facet.getName();
       int count = nameCounter.containsKey(name)? nameCounter.get(name) + 1 : 0;
-      fullName = name + "-" + count + '@' + System.identityHashCode(facet);
+      fullName = name + "-" + count; // + '@' + System.identityHashCode(facet);
       
       nameCounter.put(name, count);
       names.put(facet,  fullName);

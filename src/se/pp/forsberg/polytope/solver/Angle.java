@@ -60,15 +60,23 @@ public abstract class Angle {
       }
       return nominator + "PI/" + denominator;
     }
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof RationalPi)) {
+        return false;
+      }
+      RationalPi other = (RationalPi) obj;
+      return nominator == other.nominator && denominator == other.denominator;
+    }
   }
   
   public static class TrinaryAngle extends Angle {
     public interface Value {
       double getValue(double v1, double v2, double v3);
     }
-    private final Value value;
-    private final String description;
-    private final Angle v1, v2, v3;
+    final Value value;
+    final String description;
+    final Angle v1, v2, v3;
     public TrinaryAngle(Angle v1, Angle v2, Angle v3, Value value, String description) {
       this.value = value;
       this.description = description;
