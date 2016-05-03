@@ -13,7 +13,6 @@ import java.awt.geom.Point2D;
 import java.util.List;
 import java.util.Map;
 import java.util.Spliterator;
-import java.util.Spliterator.OfInt;
 import java.util.Spliterators;
 import java.util.function.IntConsumer;
 import java.util.function.Predicate;
@@ -258,7 +257,8 @@ public class TestPolytope {
     tesseract.scale(200, 200, 200, 200);
     show(tesseract);
   }
-  static void testAnimation() throws HeadlessException, ClassNotFoundException, InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
+  @SuppressWarnings("unused")
+	static void testAnimation() throws HeadlessException, ClassNotFoundException, InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
     final double TRIANGLE_ANGLE = Math.acos(1.0/2);
     final double TETRAHEDRON_ANGLE = Math.acos(1.0/3);
     final double SIMPLEX_ANGLE = Math.acos(1.0/4);

@@ -403,6 +403,7 @@ public class PolytopeSolver {
   private Edge copyEdge() {
     return getEdge().copyEdge();
   }
+  @SuppressWarnings("unused")
   private Polytope copy(String name) {
     return get(name).copy();
   }

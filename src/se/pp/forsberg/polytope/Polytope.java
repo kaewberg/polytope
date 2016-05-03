@@ -24,7 +24,6 @@ import java.util.Set;
  */
 public class Polytope implements Comparable<Polytope>, Cloneable {
   
-  private static final double EPSILON = 0.0000001;
   /**
    * Dimensionality of this polytope
    */
@@ -43,8 +42,10 @@ public class Polytope implements Comparable<Polytope>, Cloneable {
   protected boolean closed = false;
   
   // Avoid cumulative transformation errors
-  private Map<Polytope, Point> referenceCoordinates = new IdentityHashMap<Polytope, Point>();
-  private AffineTransform transformFromReference = new AffineTransform();
+  @SuppressWarnings("unused")
+	private Map<Polytope, Point> referenceCoordinates = new IdentityHashMap<Polytope, Point>();
+  @SuppressWarnings("unused")
+	private AffineTransform transformFromReference = new AffineTransform();
   
   //  Attributes used for solved polytypes
   int id = -1;
@@ -346,7 +347,7 @@ public class Polytope implements Comparable<Polytope>, Cloneable {
         } else {
           usedSoFar.put(p, p);
           Polytope test = Polytope.get(1.0, 1.0, 0.9999999999999999, -1.0);
-          Polytope test2 = usedSoFar.get(test);
+          usedSoFar.get(test);
           
           Set<Polytope> removals = new HashSet<Polytope>();
           Set<Polytope> additions = new HashSet<Polytope>();
@@ -389,13 +390,13 @@ public class Polytope implements Comparable<Polytope>, Cloneable {
 //    collectByDimension(n-2, result);
 //    return  result;
 //  }
-
-private void assertEquals(int i1, int i2) {
-    if (i1 != i2) {
-      throw new IllegalArgumentException("!");
-    }
-  }
-  //  private void checkValid(Map<Vertex, Vertex> vertices) {
+//
+//private void assertEquals(int i1, int i2) {
+//    if (i1 != i2) {
+//      throw new IllegalArgumentException("!");
+//    }
+//  }
+//  private void checkValid(Map<Vertex, Vertex> vertices) {
 //    if (this instanceof Vertex) {
 //      Vertex other = vertices.get(this);
 //      if (other == null) {
