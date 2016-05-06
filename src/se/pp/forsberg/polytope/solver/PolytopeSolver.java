@@ -10,9 +10,9 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.nio.file.Files;
-import java.sql.Types;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import se.pp.forsberg.polytope.solver.Angle.TrinaryAngle;
@@ -34,6 +35,7 @@ import se.pp.forsberg.polytope.solver.WorkInProgress.FacetChain;
 // a n-1 polytope is a facet
 // a n-2 polytope is a ridge
 // in addition, a n-3 polytope is a corner
+// Facets are connected pair-wise at ridges, and the angle between two facets around an ridge is the dihedral angle.
 public class PolytopeSolver {
   
   private List<Polytope> solved = new ArrayList<Polytope>();
@@ -45,12 +47,38 @@ public class PolytopeSolver {
   // (Re-)Starting point of calculation is currently a work in progress with just one facet chain set
   private class StartingPoint {
     WorkInProgress p;
+    private int ids[];
     public StartingPoint(WorkInProgress p) {
       this.p = p;
+      ids = new int[p.facets.size()];
+      int i = 0;
+      for (Polytope facet: p.facets) {
+        ids[i++] = facet.id;
+      }
+      Arrays.sort(ids);
+    }
+    public StartingPoint(int dimension, int n) {
+      // Fake
+      Polytope facet = solvedByDimension.get(dimension-1).get(0);
+      int id = facet.id;
+      ids = new int[n];
+      p = new WorkInProgress(dimension);
+      for (int i = 0; i < n; i++) {
+        ids[i] = id;
+        p.add(facet.copy());
+      }
+      
     }
     @Override
     public String toString() {
-      return "\n" + p.toString();
+      return "\n" + p.toString(false);
+    }
+    public String shortDescription() {
+      String[] result = new String[ids.length];
+      for (int i = 0; i < ids.length; i++) {
+        result[i] = solved.get(ids[i]).getName();
+      }
+      return Arrays.toString(result);
     }
   }
   
@@ -68,7 +96,7 @@ public class PolytopeSolver {
   Pattern angleDefinition = Pattern.compile("^\\s+v(\\d+) (.*)");
   Pattern ridgeAngleDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)\\s+(\\w+)-(\\d+)\\s+(\\w+)-(\\d+)\\sv(\\d+)");
   Pattern rationalPi = Pattern.compile("^(\\d*)PI(/(\\d+))?$");
-  Pattern startingPointDefinition = Pattern.compile("Currently trying");
+  Pattern startingPointDefinition = Pattern.compile("^Currently trying");
   
   private void continuePrevious() {
     StartingPoint startingPoint;
@@ -97,7 +125,7 @@ public class PolytopeSolver {
         nameToPolytopeMap.put(p.getName(), p);
       }
       // After main definitions we expect a line, then current starting point
-      if (!line.startsWith("----") || (line = line(in, lineNumber)) == null) {
+      if ((line = line(in, lineNumber)) == null) {
         throw new IOException("Line " + lineNumber[0] + ": Syntax error on line " + line);
       }
       Matcher match = startingPointDefinition.matcher(line);
@@ -112,48 +140,57 @@ public class PolytopeSolver {
       solvedByDimension.clear();
       nameToPolytopeMap.clear();
       addBasic();
-      Polytope f1 = get("Triangle").copy();
-      Polytope f2 = get("Triangle").copy();
-      Polytope f3 = get("Triangle").copy();
-      Vertex v1 = (Vertex) get("Vertex").copy();
-      Vertex v2 = (Vertex) get("Vertex").copy();
-      Vertex v3 = (Vertex) get("Vertex").copy();
-      Vertex v4 = (Vertex) get("Vertex").copy();
-      Edge e1 = new Edge(v1, v2); 
-      Edge e2 = new Edge(v2, v3); 
-      Edge e3 = new Edge(v3, v1); 
-      Edge e4 = new Edge(v1, v4);
-      Edge e5 = new Edge(v2, v4);
-      Edge e6 = new Edge(v3, v4);
-      Map<Polytope, Polytope> equivalences = new HashMap<Polytope, Polytope>();
-      Iterator<Polytope> it = f1.facets.iterator();
-      equivalences.put(it.next(), e1);
-      equivalences.put(it.next(), e2);
-      equivalences.put(it.next(), e3);
-      f1.equate(equivalences);
-      it = f2.facets.iterator();
-      equivalences.put(it.next(), e1);
-      equivalences.put(it.next(), e4);
-      equivalences.put(it.next(), e5);
-      f2.equate(equivalences);
-      it = f3.facets.iterator();
-      equivalences.put(it.next(), e2);
-      equivalences.put(it.next(), e5);
-      equivalences.put(it.next(), e6);
-      f3.equate(equivalences);
-      
-      WorkInProgress p = new WorkInProgress(3);
-      p.add(f1);
-      p.add(f2);
-      p.add(f3);
-      startingPoint = new StartingPoint(p);
+      startingPoint = getStartingPoint(3);
     }
     solve(startingPoint);
   }
-  private Polytope readPolytope(BufferedReader in, List<Angle> angles, int... lineNumber) {
+  private StartingPoint getStartingPoint(int n) {
+    // Item 0 should always be the simplex and can be connected any which way to other simplexes
+    // 3 simplexes around a corner
+    Polytope facet1 = solvedByDimension.get(n-1).get(0).copy();
+    Polytope facet2 = solvedByDimension.get(n-1).get(0).copy();
+    Polytope facet3 = solvedByDimension.get(n-1).get(0).copy();
+    // Random ridge for each simplex
+    Polytope ridge12 = facet1.facets.iterator().next();
+    Polytope ridge23 = facet2.facets.iterator().next();
+    Polytope ridge31 = facet3.facets.iterator().next();
+    // Random corner to equate
+    Polytope corner1 = ridge12.facets.iterator().next();
+    Polytope corner2 = ridge23.facets.iterator().next();
+    Polytope corner3 = ridge31.facets.iterator().next();
+    // Another ridge at same corner
+    Polytope ridge13 = facet1.facets.stream().filter(ridge -> ridge != ridge12 && ridge.facets.contains(corner1)).findAny().get();
+    Polytope ridge21 = facet2.facets.stream().filter(ridge -> ridge != ridge23 && ridge.facets.contains(corner2)).findAny().get();
+    Polytope ridge32 = facet3.facets.stream().filter(ridge -> ridge != ridge31 && ridge.facets.contains(corner3)).findAny().get();
+    // Connect everything
+    Map<Polytope, Polytope> equivalences = new HashMap<Polytope, Polytope>();
+    equivalences.put(corner2, corner1);
+    equivalences.put(corner3, corner1);
+    ridge23.equate(equivalences);
+    ridge31.equate(equivalences);
+    ridge21.equate(equivalences);
+    ridge32.equate(equivalences);
+    ridge13.equate(equivalences);
+    equivalences.put(ridge21, ridge12);
+    equivalences.put(ridge32, ridge23);
+    equivalences.put(ridge13, ridge31);
+    facet1.equate(equivalences);
+    facet2.equate(equivalences);
+    facet3.equate(equivalences);
+    WorkInProgress result = new WorkInProgress(n);
+    result.add(facet1);
+    result.add(facet2);
+    result.add(facet3);
+    return new StartingPoint(result);
+  }
+  private StartingPoint getStartingPoint(int dimension, int n) {
+    StartingPoint firstStartingPoint = new StartingPoint(dimension, n);
+    return startingPointsIncluding(firstStartingPoint).findAny().get();
+  }
+  private Polytope readPolytope(BufferedReader in, List<Angle> angles, int... lineNumber) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
     return readPolytope(in, angles, Polytope.class, lineNumber);
   }
-  private <T extends Polytope> T readPolytope(BufferedReader in, List<Angle> angles, Class<T> clazz, int... lineNumber) {
+  private <T extends Polytope> T readPolytope(BufferedReader in, List<Angle> angles, Class<T> clazz, int... lineNumber) throws IOException, InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException {
     String line = line(in, lineNumber);
     if (line == null) {
       return null;
@@ -298,7 +335,7 @@ public class PolytopeSolver {
     return result;
   }
 
-  private void spool(StartingPoint startingPoint) {
+  private synchronized void spool(StartingPoint startingPoint) {
     try (PrintStream out =  new PrintStream(spoolFile)) {
       Set<String> definedNames = new HashSet<String>();
       Map<Angle, String> angleNames = new HashMap<Angle, String>();
@@ -311,7 +348,6 @@ public class PolytopeSolver {
         }
       }
       out.println("Currently trying " + startingPoint);
-      
     } catch (FileNotFoundException e) {
       System.err.println("Spool failure!");
       e.printStackTrace();
@@ -351,6 +387,9 @@ public class PolytopeSolver {
   }
 
   private void addBasic() {
+    add(new Vertex(), "Vertex");
+    add(new Edge(copyVertex(), copyVertex()), "Edge");
+    
     add(getPolygon(3), "Triangle");
     add(getPolygon(4), "Square");
     add(getPolygon(5), "Pentagon");
@@ -407,40 +446,128 @@ public class PolytopeSolver {
   private Polytope copy(String name) {
     return get(name).copy();
   }
+  // Solution order
+  // 1) dimensions
+  // 2) Starting point, ie first facet chain
+  //    ordered such that 3 facets < 4 facets
+  //    facet1.id <= facet2.id <= ....
+  //    sum of ids
+  // 3) Similarily calculated order of following facet chains
   private void solve(StartingPoint startingPoint) {
-    int n = startingPoint.p1.n + 1;
+    int n = startingPoint.p.n;
     while (true) {
-      solve(n, startingPoint);
-      Polytope p = solvedByDimension.get(n).get(0);
-      startingPoint = new StartingPoint(p, p, p);
+      int theN = n;
+      startingPointsIncluding(startingPoint).forEachOrdered(
+        start -> {
+        spool(start);
+        solve(theN, start);
+        });
       n++;
+      startingPoint = getStartingPoint(n);
     }
   }
 
+  private Stream<StartingPoint> startingPointsIncluding(StartingPoint firstStartingPoint) {
+    // 3 - 5 facets around first corner
+    return IntStream.range(firstStartingPoint.ids.length, 6)
+        .mapToObj(n -> new Integer(n))
+        .flatMap(n -> startingPointsIncluding(n,
+                                (n > firstStartingPoint.ids.length)?
+                                getStartingPoint(firstStartingPoint.p.n, n) :
+                                firstStartingPoint));
+  }
+  private Stream<StartingPoint> startingPointsIncluding(int n, StartingPoint firstStartingPoint) {
+    // n facets around first corner
+    // order so that starting point ids are increasing (or equal)
+    // A bit of ugliness because I want to use lambdas...
+    switch (n) {
+    case 3: return startingPoints3Including(firstStartingPoint);
+    case 4: return startingPoints4Including(firstStartingPoint);
+    case 5: return startingPoints5Including(firstStartingPoint);
+    default: throw new IllegalArgumentException("can only fold 3-5 polytopes around a corner");
+    }
+  }
+  private Stream<StartingPoint> startingPoints3Including(StartingPoint firstStartingPoint) {
+    int n = firstStartingPoint.p.n;
+    return solvedByDimension.get(n-1).stream()
+      .filter(facet -> facet.id >= firstStartingPoint.ids[0])
+      .flatMap(f1 -> solvedByDimension.get(n-1).stream()
+        .filter(facet -> f1.id > firstStartingPoint.ids[0]?
+                         facet.id >= f1.id :
+                         facet.id >= firstStartingPoint.ids[1])
+        .flatMap(f2 -> solvedByDimension.get(n-1).stream()
+          .filter(facet -> (f1.id > firstStartingPoint.ids[0] ||
+                            f1.id == firstStartingPoint.ids[0] && f2.id > firstStartingPoint.ids[1])?
+                           facet.id >= f2.id :
+                           facet.id >= firstStartingPoint.ids[2])
+          .flatMap(f3 -> waysToConnect(f1.copy(), f2.copy(), f3.copy())
+       ))); 
+  }
+  private Stream<StartingPoint> startingPoints4Including(StartingPoint firstStartingPoint) {
+    int n = firstStartingPoint.p.n;
+    return solvedByDimension.get(n-1).stream()
+      .filter(facet -> facet.id >= firstStartingPoint.ids[0])
+      .flatMap(f1 -> solvedByDimension.get(n-1).stream()
+        .filter(facet -> f1.id > firstStartingPoint.ids[0]?
+                         facet.id >= f1.id :
+                         facet.id >= firstStartingPoint.ids[1])
+        .flatMap(f2 -> solvedByDimension.get(n-1).stream()
+          .filter(facet -> (f1.id > firstStartingPoint.ids[0] ||
+                            f1.id == firstStartingPoint.ids[0] && f2.id > firstStartingPoint.ids[1])?
+                           facet.id >= f2.id :
+                           facet.id >= firstStartingPoint.ids[2])
+          .flatMap(f3 -> solvedByDimension.get(n-1).stream()
+            .filter(facet -> (f1.id > firstStartingPoint.ids[0] ||
+                              f1.id == firstStartingPoint.ids[0] && f2.id > firstStartingPoint.ids[1] ||
+                              f1.id == firstStartingPoint.ids[0] && f2.id == firstStartingPoint.ids[1] && f3.id > firstStartingPoint.ids[2])?
+                              facet.id >= f3.id :
+                              facet.id >= firstStartingPoint.ids[3])
+            .flatMap(f4 -> waysToConnect(f1.copy(), f2.copy(), f3.copy(), f4.copy())
+       )))); 
+  }
+  private Stream<StartingPoint> startingPoints5Including(StartingPoint firstStartingPoint) {
+    int n = firstStartingPoint.p.n;
+    return solvedByDimension.get(n-1).stream()
+      .filter(facet -> facet.id >= firstStartingPoint.ids[0])
+      .flatMap(f1 -> solvedByDimension.get(n-1).stream()
+        .filter(facet -> f1.id > firstStartingPoint.ids[0]?
+                         facet.id >= f1.id :
+                         facet.id >= firstStartingPoint.ids[1])
+        .flatMap(f2 -> solvedByDimension.get(n-1).stream()
+          .filter(facet -> (f1.id > firstStartingPoint.ids[0] ||
+                            f1.id == firstStartingPoint.ids[0] && f2.id > firstStartingPoint.ids[1])?
+                           facet.id >= f2.id :
+                           facet.id >= firstStartingPoint.ids[2])
+          .flatMap(f3 -> solvedByDimension.get(n-1).stream()
+            .filter(facet -> (f1.id > firstStartingPoint.ids[0] ||
+                              f1.id == firstStartingPoint.ids[0] && f2.id > firstStartingPoint.ids[1] ||
+                              f1.id == firstStartingPoint.ids[0] && f2.id == firstStartingPoint.ids[1] && f3.id > firstStartingPoint.ids[2])?
+                              facet.id >= f3.id :
+                              facet.id >= firstStartingPoint.ids[3])
+            .flatMap(f4 -> solvedByDimension.get(n-1).stream()
+              .filter(facet -> (f1.id > firstStartingPoint.ids[0] ||
+                                f1.id == firstStartingPoint.ids[0] && f2.id > firstStartingPoint.ids[1] ||
+                                f1.id == firstStartingPoint.ids[0] && f2.id == firstStartingPoint.ids[1] && f3.id > firstStartingPoint.ids[2] ||
+                                f1.id == firstStartingPoint.ids[0] && f2.id == firstStartingPoint.ids[1] && f3.id == firstStartingPoint.ids[2] && f4.id > firstStartingPoint.ids[3])?
+                                facet.id >= f4.id :
+                                facet.id >= firstStartingPoint.ids[4])
+              .flatMap(f5 -> waysToConnect(f1.copy(), f2.copy(), f3.copy(), f4.copy(), f5.copy())
+       ))))); 
+  }
+
   private void solve(int n, StartingPoint startingPoint) {
-    waysToSolve(new WorkInProgress(n), startingPoint).forEach(p -> add(p));
+    waysToSolve(startingPoint.p).forEach(p -> add(p));
   }
   // Ways to complete a partially constructed polytope
   // General rule, whenever we return a stream of options based on a initial value,
   // we should return copies of the objects
-  private Stream<WorkInProgress> waysToSolve(WorkInProgress p, StartingPoint startingPoint) {
-    // If empty, restart at starting point
-    if (p.isEmpty()) {
-      Polytope p1 = startingPoint.p1.copy();
-      Polytope p2 = startingPoint.p2.copy();
-      Polytope p3 = startingPoint.p3.copy();
-      p.add(p1);
-      return waysToSelect1(p.n-1).flatMap(facet -> {
-        WorkInProgress p2 = new WorkInProgress(p.n);
-        p2.add(facet);
-        return waysToSolve(p2);
-      });
-    }
-    // Otherwise, select a random unfinished corner 
+  private Stream<WorkInProgress> waysToSolve(WorkInProgress p) {
+    
+    // Select a random unfinished corner 
     Set<Polytope> finishedCorners = p.finishedCorners.keySet();
     Optional<Polytope> unfinishedCorner = p.facets.stream().flatMap(
         facet -> facet.facets.stream().flatMap(
-            ridge -> facet.facets.stream()))
+            ridge -> ridge.facets.stream()))
         .filter(corner -> !finishedCorners.contains(corner)).findAny();
     // Done if there are no unfinished corners
     if (!unfinishedCorner.isPresent()) {
@@ -465,7 +592,7 @@ public class PolytopeSolver {
        .collect(Collectors.toSet());
     
     // If algorithm works as supposed, neighboring facets will form a partial, connected facet chain.
-    Map<Polytope, Polytope> facetToFacetMap = new HashMap<Polytope, Polytope>();
+    Map<Polytope, List<Polytope>> facetToFacetMap = new HashMap<Polytope, List<Polytope>>();
     Polytope openFacet = null;
     for (Polytope ridge: neighborRidges) {
       Set<Polytope> facets = new HashSet<Polytope>(ridgeToFacetMap.get(ridge));
@@ -473,8 +600,8 @@ public class PolytopeSolver {
       if (facets.size() == 2) {
         Polytope facet1 = it.next();
         Polytope facet2 = it.next();
-        facetToFacetMap.put(facet1,  facet2);
-        facetToFacetMap.put(facet2,  facet1);
+        safeAdd(facetToFacetMap, facet1, facet2);
+        safeAdd(facetToFacetMap, facet2, facet1);
       } else {
         openFacet = it.next();
       }
@@ -488,15 +615,20 @@ public class PolytopeSolver {
       facetChain.add(ridge, openFacet);
     } else {
       // Choose ridge not in neighborRidges containing corner
-      Polytope ridge1 = openFacet.facets.stream().filter(ridge -> !neighborRidges.contains(ridge) && ridge.facets.contains(corner)).findAny().get();
+      // Just a minute! neighborRidges is all ridges containing corner??
+      // We actually mean open ridges containing corner 
+      Polytope ridge1 = openFacet.facets.stream().filter(ridge -> ridge.facets.contains(corner) && ridgeToFacetMap.get(ridge).size() < 2).findAny().get();
       facetChain.add(ridge1, openFacet);
       // Then follow facetToFacet map
       Polytope lastFacet = openFacet;
+      Polytope nextToLastFacet = null;
       Polytope facet;
-      while ((facet = facetToFacetMap.get(lastFacet)) != null)  {
+      while ((facet = getOther(facetToFacetMap, lastFacet, nextToLastFacet)) != null)  {
         Set<Polytope> ridges = new HashSet<Polytope>(lastFacet.facets);
         ridges.retainAll(facet.facets);
-        facetChain.add(facet, ridges.iterator().next());
+        facetChain.add(ridges.iterator().next(), facet);
+        nextToLastFacet = lastFacet;
+        lastFacet = facet;
       }
     }
     return waysToComplete(facetChain).flatMap(
@@ -509,6 +641,19 @@ public class PolytopeSolver {
     });
   }
  
+  private <Key, Value> Value getOther(Map<Key, List<Value>> map,  Key key, Value exclude) {
+    List<Value> values = map.get(key);
+    if (values == null) {
+      return null;
+    }
+    for (Value value: values) {
+      if (value != exclude) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   private Stream<FacetChain> waysToComplete(FacetChain facetChain) {
     Polytope facet = facetChain.facets.get(facetChain.facets.size() - 1);
     Polytope ridge = facetChain.lastRidge();
@@ -518,14 +663,25 @@ public class PolytopeSolver {
         waysToSelect1(facet.n).flatMap(
             newFacet -> newFacet.waysToConnect(facet, ridge).map(
                 equivalences -> {
+                  Polytope newFacetDbg = newFacet;
                   FacetChain result = facetChain.copy();
-                  Map<Polytope, Polytope> replacements = new HashMap<Polytope, Polytope>();
-                  Polytope newFacetCopy = newFacet.copy(replacements);
-                  newFacetCopy.equate(compose(equivalences, replacements));
+//                  Map<Polytope, Polytope> replacements = new HashMap<Polytope, Polytope>();
+//                  Polytope newFacetCopy = newFacet.copy(replacements);
+//                  newFacetCopy.equate(compose(equivalences, replacements));
+                  Map<Polytope, Polytope> orgEqv = new HashMap<Polytope, Polytope>(equivalences);
+                  Polytope newFacetCopy = newFacet.copy(equivalences);
                   result.add(ridge, newFacetCopy);
                   return result;
                 })));
   }
+  private static <Key, Value> Map<Value, Key> invert(Map<Key, Value> map) {
+    Map<Value, Key> result = new HashMap<Value, Key>();
+    for (Key key: map.keySet()) {
+      result.put(map.get(key), key);
+    }
+    return result;
+  }
+
   private static <T1, T2, T3> Map<T1, T3> compose(Map<T1, T2> m1, Map<T2, T3> m2) {
     Map<T1, T3> result = new HashMap<T1, T3>();
     for (T1 t1: m1.keySet()) {
@@ -541,27 +697,27 @@ public class PolytopeSolver {
     return solvedByDimension.get(n).stream();
   }
   
-  private void fakeSolve() {
-    // New version, more like final goal
-    
-    // Fold 3 facets < 360 around a ridge
-    int n = 2;
-    waysToConnect3(n).forEach(
-        way -> {
-        WorkInProgress p = new WorkInProgress(n+1);
-        p.add(way.f1);
-        p.add(way.f2);
-        p.add(way.f3);
-        Fold3Solution solution = Fold3Solution.givenFacetAngles(way.f1.getAngle(way.ridge), way.f2.getAngle(way.ridge), way.f3.getAngle(way.ridge));
-        Polytope f1f2 = way.f1.facets.stream().filter(ridge -> way.f2.facets.contains(ridge)).findAny().get();
-        Polytope f1f3 = way.f1.facets.stream().filter(ridge -> way.f3.facets.contains(ridge)).findAny().get();
-        Polytope f2f3 = way.f2.facets.stream().filter(ridge -> way.f3.facets.contains(ridge)).findAny().get();
-        p.setAngle(f1f2, solution.v12);
-        p.setAngle(f2f3, solution.v23);
-        p.setAngle(f1f3, solution.v31);
-        close(p);
-    });
-  }
+//  private void fakeSolve() {
+//    // New version, more like final goal
+//    
+//    // Fold 3 facets < 360 around a ridge
+//    int n = 2;
+//    waysToConnect3(n).forEach(
+//        way -> {
+//        WorkInProgress p = new WorkInProgress(n+1);
+//        p.add(way.f1);
+//        p.add(way.f2);
+//        p.add(way.f3);
+//        Fold3Solution solution = Fold3Solution.givenFacetAngles(way.f1.getAngle(way.ridge), way.f2.getAngle(way.ridge), way.f3.getAngle(way.ridge));
+//        Polytope f1f2 = way.f1.facets.stream().filter(ridge -> way.f2.facets.contains(ridge)).findAny().get();
+//        Polytope f1f3 = way.f1.facets.stream().filter(ridge -> way.f3.facets.contains(ridge)).findAny().get();
+//        Polytope f2f3 = way.f2.facets.stream().filter(ridge -> way.f3.facets.contains(ridge)).findAny().get();
+//        p.setAngle(f1f2, solution.v12);
+//        p.setAngle(f2f3, solution.v23);
+//        p.setAngle(f1f3, solution.v31);
+//        close(p);
+//    });
+//  }
   private void close(WorkInProgress p) {
     // Try closing polytope
     // Add all open ridges to final facet
@@ -699,46 +855,165 @@ public class PolytopeSolver {
       this.ridge = ridge;
     }
   }
-  private Stream<WayToConnect3> waysToConnect3(int n) {
+  private Stream<StartingPoint> waysToConnect3(int n) {
     return solvedByDimension.get(n).stream().flatMap(
         f1 -> solvedByDimension.get(n).stream().flatMap(
             f2 -> solvedByDimension.get(n).stream().flatMap(
                 f3 -> waysToConnect(f1.copy(), f2.copy(), f3.copy())
             )));
   }
-
-  private Stream<WayToConnect3> waysToConnect(Polytope f1, Polytope f2, Polytope f3) {
+  
+  // Reworked version creating a starting point of 3-5 facets around a corner
+  private Stream<StartingPoint> waysToConnect(Polytope f1, Polytope f2, Polytope f3, Polytope f4, Polytope f5) {
     // For all ways to connect f1 to f2
-    return f2.waysToConnect(f1).flatMap(
-        equivalencesf2f1 -> {
-        // Connect, find facet that was connected
-        connectAndCopy(f2, f1, equivalencesf2f1);
-        Polytope f1Copy = equivalencesf2f1.get(f1);
-        Polytope f2Copy = equivalencesf2f1.get(f2);
-        Polytope facetf1f2 = equivalencesf2f1.values().stream().filter(p -> p.n == f1.n - 1).findFirst().get();
-        // For each ridge in facet, find neighbor facets in f1 and f2
+    return f1.waysToConnect(f2).flatMap(
+        equivalencesf1f2 -> {
+        // The equivalences returned by waysToConnect contains a single facet (n-1) mapping and mapping of subpolytopes.
+        // The mapping is supposed to transform f1's subpolytopes to f2 terms.
+        // In other words, the keys of the map are in f1 terms, the values in f2 terms.
+        Polytope facetf1f2_1 = equivalencesf1f2.keySet().stream().filter(p -> p.n == f1.n - 1).findFirst().get();
+        Polytope facetf1f2_2 = equivalencesf1f2.get(facetf1f2_1);
+        Polytope f1_2 = f1.copy(equivalencesf1f2); // Map f1 to f2 terms (ie connect them around facetf1f2
+        // For each ridge in facet, find neighbor facet in f2
+        return facetf1f2_2.facets.stream().flatMap(
+            // This is the ridge we will keep folding around (in f2 terms hence the 2)
+            ridge2 -> {
+            Polytope neighborInF1_2 = f1_2.getOtherFacet(facetf1f2_2, ridge2);
+            Polytope neighborInF2 = f2.getOtherFacet(facetf1f2_2, ridge2);
+            // For all ways to connect neighbor in f2 to f3
+            return f2.waysToConnect(f3, neighborInF2).flatMap(
+                equivalencesf2f3 -> {
+                Polytope facetf2f3 = equivalencesf2f3.values().stream().filter(p -> p.n == f1.n - 1).findFirst().get();
+                Polytope f1_3 = f1_2.copy(equivalencesf2f3); // Keep mapping and connecting
+                Polytope f2_3 = f2.copy(equivalencesf2f3);
+                Polytope neighborInF1_3 = neighborInF1_2.copy(equivalencesf2f3);
+                // Keep using same ridge (but in new terms)
+                Polytope ridge3 = equivalencesf2f3.get(ridge2);
+                Polytope neighborInF3 = f3.getOtherFacet(facetf2f3, ridge3);
+                return f3.waysToConnect(f4, neighborInF3).flatMap(
+                    equivalencesf3f4 -> {
+                    Polytope facetf3f4 = equivalencesf3f4.values().stream().filter(p -> p.n == f1.n - 1).findFirst().get();
+                    Polytope f1_4 = f1_3.copy(equivalencesf3f4);
+                    Polytope f2_4 = f2_3.copy(equivalencesf3f4);
+                    Polytope f3_4 = f3.copy(equivalencesf3f4);
+                    Polytope ridge4 = equivalencesf3f4.get(ridge3);
+                    Polytope neighborInF1_4 = neighborInF1_3.copy(equivalencesf3f4);
+                    Polytope neighborInF4 = f4.getOtherFacet(facetf3f4, ridge4);
+                    // And finally, f5 should connect to both f1 and f4 (using neighboring facets)
+                    // Note that mapping is from f5 to f1_4 and f4
+                    return f5.waysToConnectFacets(neighborInF1_4, neighborInF4).map(
+                        equivalencesf5f4 -> {
+                        Polytope f5_4 = f5.copy(equivalencesf5f4);
+                        WorkInProgress wip = new WorkInProgress(f1.n + 1);
+                        wip.add(f1_4);
+                        wip.add(f2_4);
+                        wip.add(f3_4);
+                        wip.add(f4);
+                        wip.add(f5_4);
+                        return new StartingPoint(wip);
+                        });
+                    });
+                });
+            });
+         });
+  }
+  // Might have been able to do a single version with different number of facets, but my brain is melting after writing the above :-)
+  private Stream<StartingPoint> waysToConnect(Polytope f1, Polytope f2, Polytope f3, Polytope f4) {
+    return f1.waysToConnect(f2).flatMap(
+        equivalencesf1f2 -> {
+        Polytope facetf1f2 = equivalencesf1f2.values().stream().filter(p -> p.n == f1.n - 1).findFirst().get();
+        Polytope f1_2 = f1.copy(equivalencesf1f2);
         return facetf1f2.facets.stream().flatMap(
-            ridge -> {
-            Polytope neighborInF1 = f1Copy.getOtherFacet(facetf1f2, ridge);
-            Polytope neighborInF2 = f2Copy.getOtherFacet(facetf1f2, ridge);
-            // Connect both ridges to  f3
-            //return Stream.of(new WayToConnect3());
-            return f3.waysToConnectFacets(neighborInF1, neighborInF2)
-                .map(
-                equivalencesf3f1f2-> {
-                Map<Polytope, Polytope> replacements = new HashMap<Polytope, Polytope>();
-                Polytope f3Copy = f3.copy(replacements);
-                Map<Polytope, Polytope> equivalencesCopy = new HashMap<Polytope, Polytope>();
-                for (Polytope p: equivalencesf3f1f2.keySet()) {
-                  equivalencesCopy.put(replacements.get(p), equivalencesf3f1f2.get(p));
-                }
-                f3Copy.equate(equivalencesCopy);
-                return new WayToConnect3(f1Copy, f2Copy, f3Copy, ridge);
-            }).filter(way -> way.f1.getAngle(way.ridge).getAngle() +
-                             way.f2.getAngle(way.ridge).getAngle() +
-                             way.f3.getAngle(way.ridge).getAngle() < 2*Math.PI);
-        });
-    });
+            ridge2 -> {
+            Polytope neighborInF2 = f2.getOtherFacet(facetf1f2, ridge2);
+            Polytope neighborInF1_2 = f1_2.getOtherFacet(facetf1f2, ridge2);
+            return f2.waysToConnect(f3, neighborInF2).flatMap(
+                equivalencesf2f3 -> {
+                Polytope facetf2f3 = equivalencesf2f3.values().stream().filter(p -> p.n == f1.n - 1).findFirst().get();
+                Polytope f1_3 = f1_2.copy(equivalencesf2f3);
+                Polytope f2_3 = f2.copy(equivalencesf2f3);
+                // Keep using same ridge (but in new terms)
+                Polytope ridge3 = equivalencesf2f3.get(ridge2);
+                Polytope neighborInF3 = f3.getOtherFacet(facetf2f3, ridge3);
+                Polytope neighborInF1_3 = neighborInF1_2.copy(equivalencesf2f3);
+                return f4.waysToConnectFacets(neighborInF1_3, neighborInF3).map(
+                    equivalencesf4f3 -> {
+                    Polytope f4_3 = f4.copy(equivalencesf4f3);
+                    WorkInProgress wip = new WorkInProgress(f1.n + 1);
+                    wip.add(f1_3);
+                    wip.add(f2_3);
+                    wip.add(f3);
+                    wip.add(f4_3);
+                    return new StartingPoint(wip);
+                    });
+                });
+            });
+         });
+  }
+  private Stream<StartingPoint> waysToConnect(Polytope f1, Polytope f2, Polytope f3) {
+    return f1.waysToConnect(f2).flatMap(
+        equivalencesf1f2 -> {
+          Polytope dbg_f1 = f1;
+          Polytope dbg_f2 = f2;
+          Polytope dbg_f3 = f3;
+        Polytope facetf1f2 = equivalencesf1f2.values().stream().filter(p -> p.n == f1.n - 1).findFirst().get();
+        Polytope f1_2 = f1.copy(equivalencesf1f2);
+        
+        return facetf1f2.facets.stream().flatMap(
+            ridge2 -> {
+            Polytope neighborInF2 = f2.getOtherFacet(facetf1f2, ridge2);
+            Polytope neighborInF1_2 = f1_2.getOtherFacet(facetf1f2, ridge2);
+            return f3.waysToConnectFacets(neighborInF1_2, neighborInF2).map(
+                equivalencesf3f2 -> {
+                  Polytope dbG_f1 = f1;
+                  Polytope dbG_f2 = f2;
+                  Polytope dbG_f1_2 = f1_2;
+                  Polytope dbG_f3 = f3;
+                Polytope f3_2 = f3.copy(equivalencesf3f2);
+                WorkInProgress wip = new WorkInProgress(f1.n + 1);
+                wip.add(f1_2);
+                wip.add(f2);
+                wip.add(f3_2);
+                StartingPoint result = new StartingPoint(wip);
+                System.out.println("Trying " + result.shortDescription());
+                return result;
+                });
+            });
+         });
+  }
+
+//  private Stream<WayToConnect3> waysToConnect(Polytope f1, Polytope f2, Polytope f3) {
+//    // For all ways to connect f1 to f2
+//    return f2.waysToConnect(f1).flatMap(
+//        equivalencesf2f1 -> {
+//        // Connect, find facet that was connected
+//        connectAndCopy(f2, f1, equivalencesf2f1);
+//        Polytope f1Copy = equivalencesf2f1.get(f1);
+//        Polytope f2Copy = equivalencesf2f1.get(f2);
+//        Polytope facetf1f2 = equivalencesf2f1.values().stream().filter(p -> p.n == f1.n - 1).findFirst().get();
+//        // For each ridge in facet, find neighbor facets in f1 and f2
+//        return facetf1f2.facets.stream().flatMap(
+//            ridge -> {
+//            Polytope neighborInF1 = f1Copy.getOtherFacet(facetf1f2, ridge);
+//            Polytope neighborInF2 = f2Copy.getOtherFacet(facetf1f2, ridge);
+//            // Connect both ridges to  f3
+//            //return Stream.of(new WayToConnect3());
+//            return f3.waysToConnectFacets(neighborInF1, neighborInF2)
+//                .map(
+//                equivalencesf3f1f2-> {
+//                Map<Polytope, Polytope> replacements = new HashMap<Polytope, Polytope>();
+//                Polytope f3Copy = f3.copy(replacements);
+//                Map<Polytope, Polytope> equivalencesCopy = new HashMap<Polytope, Polytope>();
+//                for (Polytope p: equivalencesf3f1f2.keySet()) {
+//                  equivalencesCopy.put(replacements.get(p), equivalencesf3f1f2.get(p));
+//                }
+//                f3Copy.equate(equivalencesCopy);
+//                return new WayToConnect3(f1Copy, f2Copy, f3Copy, ridge);
+//            }).filter(way -> way.f1.getAngle(way.ridge).getAngle() +
+//                             way.f2.getAngle(way.ridge).getAngle() +
+//                             way.f3.getAngle(way.ridge).getAngle() < 2*Math.PI);
+//        });
+//    });
 //        return facetf1f2.facets.stream().flatMap(
 //            ridge ->
 //            return new WayToConnect3();
@@ -755,7 +1030,7 @@ public class PolytopeSolver {
 //                )
 //            )
 //        });
-  }
+//  }
 
 //  private void fakeSolveOld() {
 //    

@@ -226,8 +226,10 @@ public class Polytope {
   //   Angle-1 Triangle-0 Triangle-2 v1
   //   Angle-2 Triangle-0 Triangle-3 v1
   //   Angle-3 Triangle-1 Triangle-2 v1
-  protected void toString(boolean definitions) {
-  
+  protected String toString(boolean definitions) {
+    StringBuilder stringBuilder = new StringBuilder();
+    toString(definitions, stringBuilder, new HashSet<String>(), new HashMap<Angle, String>());
+    return stringBuilder.toString();
   }
   protected void toString(boolean definitions, StringBuilder stringBuilder, Set<String> definedNames, Map<Angle, String> angleNames) {
     String name = getName();
@@ -236,16 +238,18 @@ public class Polytope {
     }
     definedNames.add(name);
 
-    // Recursively print definitions of component polytopes 
-    for (Polytope facet: facets) {
-      facet.toString(definitions, stringBuilder, definedNames, angleNames);
+    // Recursively print definitions of component polytopes
+    if (definitions) {
+      for (Polytope facet: facets) {
+        facet.toString(definitions, stringBuilder, definedNames, angleNames);
+      }
     }
     
     Map<String, Integer> nameCounter = new HashMap<String, Integer>();
     Map<Polytope, String> names = new HashMap<Polytope, String>();
     
     stringBuilder.append(n).append("-polytope ").append(id).append(' ').append(name)
-      //.append('@').append(System.identityHashCode(this))
+      .append('@').append(System.identityHashCode(this))
       .append('\n');
     Map<Polytope, Set<Polytope>> ridgeToFacetMap = new HashMap<Polytope, Set<Polytope>>();
     for (Polytope facet: facets) {
@@ -292,7 +296,7 @@ public class Polytope {
     if (fullName == null) {
       String name = facet.getName();
       int count = nameCounter.containsKey(name)? nameCounter.get(name) + 1 : 0;
-      fullName = name + "-" + count; // + '@' + System.identityHashCode(facet);
+      fullName = name + "-" + count + '@' + System.identityHashCode(facet);
       
       nameCounter.put(name, count);
       names.put(facet,  fullName);

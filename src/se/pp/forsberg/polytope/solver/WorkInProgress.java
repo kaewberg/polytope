@@ -3,6 +3,8 @@ package se.pp.forsberg.polytope.solver;
 import static java.lang.Math.PI;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -30,7 +32,10 @@ class WorkInProgress extends Polytope {
     }
 
     public boolean add(Polytope ridge, Polytope facet) {
-      double angle = facet.getAngle(ridge).getAngle();
+      if (!facet.ridgeAngles.containsKey(corner)) {
+        throw new IllegalArgumentException("facet does not contain corner");
+      }
+      double angle = facet.getAngle(corner).getAngle();
       if (angularSum + angle > 2 * PI) {
         return false;
       }
@@ -66,7 +71,7 @@ class WorkInProgress extends Polytope {
       lastRidge().equate(equivalences.get());
       return true;
     }
-
+    
     // Copy and map equivalences
     public FacetChain copy(Map<Polytope, Polytope> equivalences) {
       FacetChain result = new FacetChain(equivalent(equivalences, corner));
@@ -114,6 +119,10 @@ class WorkInProgress extends Polytope {
     finishedCorners.put(facetChain.corner, facetChain);
   }
 
+  public WorkInProgress(Polytope p) {
+    super(p.n);
+    p.copyCommon(this, new HashMap<Polytope, Polytope>());
+  }
   public Stream<Polytope> unfinishedCorners() {
     return facets.stream().flatMap(
         facet -> facet.facets.stream().flatMap(
@@ -266,6 +275,9 @@ class WorkInProgress extends Polytope {
   }
   public boolean isEmpty() {
     return facets.isEmpty();
+  }
+  public WorkInProgress copyWiP() {
+    return copyWiP(Collections.emptyMap());
   }
   public WorkInProgress copyWiP(Map<Polytope, Polytope> replacementMap) {
     if (replacementMap.containsKey(this)) {
