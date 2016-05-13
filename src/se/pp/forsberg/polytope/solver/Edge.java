@@ -46,6 +46,24 @@ public class Edge extends Polytope {
   public Vertex getVertex() {
     return (Vertex) facets.iterator().next();
   }
+  @Override
+  public void check() {
+    if (facets.size() != 2) {
+      throw new IllegalArgumentException("Edge with more than two vertices?!");
+    }
+    Iterator<Polytope> it = facets.iterator();
+    Polytope v1 = it.next();
+    Polytope v2 = it.next();
+    if (v1 == null || v2 == null) {
+      throw new IllegalArgumentException("Null vertex?!");
+    }
+    if (v1 == v2) {
+      throw new IllegalArgumentException("Circular edge?!");
+    }
+    if (!(v1 instanceof Vertex && v2 instanceof Vertex)) {
+      throw new IllegalArgumentException("Invalid dimensionality");
+    }
+  }
   
   @Override
   protected Map<Polytope, Polytope> findEquivalencies(Polytope p) {

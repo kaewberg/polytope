@@ -11,6 +11,8 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import sun.reflect.ReflectionFactory.GetReflectionFactoryAction;
+
 public class Polytope {
 
   protected final int n;
@@ -479,6 +481,9 @@ public class Polytope {
       }
     }
     if (!removals.isEmpty() || !additions.isEmpty()) {
+      if (facets.size() + additions.size() - removals.size() < n) {
+        throw new IllegalArgumentException("Logic error, to few facets after equating");
+      }
       facets.removeAll(removals);
       facets.addAll(additions);
     }
@@ -505,6 +510,36 @@ public class Polytope {
 //    throw new IllegalArgumentException("Can't equate, not equivalent");
 //  }
 //  Map<Polytope, Polytope> equivalences = ways.get();
+
+  public Map<Polytope, Set<Polytope>> getRidgeToFacetMap() {
+    Map<Polytope, Set<Polytope>> result = new HashMap<Polytope, Set<Polytope>>();
+    for (Polytope facet: facets) {
+      for (Polytope ridge: facet.facets) {
+        Set<Polytope> ridgeFacets = result.get(ridge);
+        if (ridgeFacets == null) {
+          ridgeFacets = new HashSet<Polytope>();
+          result.put(ridge, ridgeFacets);
+        }
+        ridgeFacets.add(facet);
+      }
+    }
+    return result;
+  }
+  
+  public void check() {
+    for (Polytope facet: facets) {
+      if (facet.n != n-1) {
+        throw new IllegalArgumentException("Invalid dimensionality");
+      }
+      facet.check();
+    }
+    Map<Polytope, Set<Polytope>> ridgeToFacetMap = getRidgeToFacetMap();
+    for (Polytope ridge: ridgeToFacetMap.keySet()) {
+      if (ridgeToFacetMap.get(ridge).size() > 2) {
+        throw new IllegalArgumentException("More than two facets around a ridge?!");
+      }
+    }
+  }
 
 //  public static Polytope connectAndCopy(Polytope f1, Polytope f2, Map<Polytope, Polytope> equivalencesf1f2) {
 //    Map<Polytope, Polytope> newPolytopes = new HashMap<Polytope, Polytope>();

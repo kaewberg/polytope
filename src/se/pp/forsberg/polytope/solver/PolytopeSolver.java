@@ -78,7 +78,7 @@ public class PolytopeSolver {
       Set<Polytope> corners = new HashSet<Polytope>(ridges.get(0).facets);
       corners.retainAll(ridges.get(1).facets);
       Polytope corner = corners.iterator().next();
-      FacetChain chain = p.new FacetChain(corner);
+      FacetChain chain = p.newFacetChain(corner);
       for (i = 0; i < facets.size(); i++) {
         chain.add(ridges.get(i), facets.get(i));
       }
@@ -638,7 +638,7 @@ public class PolytopeSolver {
         openFacet = it.next();
       }
     }
-    FacetChain facetChain = p.new FacetChain(corner);
+    FacetChain facetChain = p.newFacetChain(corner);
     if (facetToFacetMap.isEmpty()) {
       // Just a single facet. Choose any neighborRidge.
       Set<Polytope> ridges = new HashSet<Polytope>(openFacet.facets);
@@ -656,7 +656,7 @@ public class PolytopeSolver {
       // We now have all four facets, but the ridge p3-p4 is not connected
       // That is, we have two ridges with the same corners, but they have not been equated
       // When completing p3 we should have two open ridges containing the same set of corners and equate them... probably in waysToComplete that return single way?
-      // Finally, when completing p4 we should have no open ridges at all (null pointer as written now...)
+      // Finally, when completing p4 we should have no open ridges at all
       Polytope ridge1;
       Polytope nextToLastFacet = null;
       if (openFacet == null) {
@@ -666,7 +666,11 @@ public class PolytopeSolver {
         openFacet = ridgeToFacetMap.get(ridge1).iterator().next(); // Not really open
         nextToLastFacet = facetToFacetMap.get(openFacet).iterator().next();
       } else {
-        ridge1 = openFacet.facets.stream().filter(ridge -> ridge.facets.contains(corner) && ridgeToFacetMap.get(ridge).size() < 2).findAny().get();
+        Optional<Polytope> maybeRidge = openFacet.facets.stream().filter(ridge -> ridge.facets.contains(corner) && ridgeToFacetMap.get(ridge).size() < 2).findAny();
+        if (!maybeRidge.isPresent()) {
+          throw new IllegalArgumentException("Logic error, ridge does not exist");
+        }
+        ridge1 = maybeRidge.get();
       }
       facetChain.add(ridge1, openFacet);
       // Then follow facetToFacet map
@@ -689,16 +693,19 @@ public class PolytopeSolver {
     // Fourth triangle will be attached to an edge that's already closed!
     // Solution: add link from facetChain to WorkInProgress, and copy whole workInProgress whenever a facetChain is closed
     
+    facetChain.getWorkInProgress().check();
     return waysToComplete(facetChain).flatMap(
         chain -> {
         //Polytope pDbg = p;
         Map<Polytope, Polytope> equivalences = new HashMap<Polytope, Polytope>();
-        WorkInProgress result = p.copyWiP(equivalences);
-        FacetChain chainCopy = chain.copy(equivalences);
+//        WorkInProgress result = p.copyWiP(equivalences);
+        FacetChain chainCopy = chain.copyWorkInProgress(equivalences);
+        WorkInProgress result = chainCopy.getWorkInProgress();
 //        chainCopy.close();
-        result.finishedCorners.put(equivalences.get(corner), chainCopy);
+        result.addFinishedCorner(chainCopy);
         result.facets.addAll(chainCopy.facets);
         result.coalesceRidges();
+        result.check();
         System.out.println("Finished a corner... Current finished corners:");
         for (Polytope corner2: result.finishedCorners.keySet()) {
           System.out.println(result.finishedCorners.get(corner2));
@@ -726,19 +733,23 @@ public class PolytopeSolver {
     Polytope lastRidge = facetChain.lastRidge();
     if (firstRidge == lastRidge) {
       // Already completed
+      facetChain.getWorkInProgress().check();
       return Stream.of(facetChain);
     } else if (firstRidge.facets.equals(lastRidge.facets)) {
       // Unconnected but equivalent. Equate.
       Map<Polytope, Polytope> equivalences = new HashMap<Polytope, Polytope>();
-      equivalences.put(lastRidge, firstRidge);
-      FacetChain result1 = facetChain.copy(equivalences);
-//      for (Polytope facet1: result1.facets) {
-//        facet1.equate(equivalences);
-//      }
+      FacetChain result1 = facetChain.copyWorkInProgress(equivalences);
+      Polytope newFirstRidge = equivalences.get(firstRidge);
+      Polytope newLastRidge = equivalences.get(lastRidge);
+      equivalences = new HashMap<Polytope, Polytope>();
+      equivalences.put(newLastRidge, newFirstRidge);
+      for (Polytope facet1: result1.facets) {
+        facet1.equate(equivalences);
+      }
+      result1.getWorkInProgress().check();
       return Stream.of(result1);
     }
-    Map<Polytope, Polytope> equivalences1 = new HashMap<Polytope, Polytope>();
-    FacetChain result1 = facetChain.copy(equivalences1);
+    FacetChain result1 = facetChain.copyWorkInProgress();
     return Stream.concat(
         result1.close()? Stream.of(result1) : Stream.empty(),
         waysToSelect1(facet.n).flatMap(
@@ -748,14 +759,16 @@ public class PolytopeSolver {
                   Polytope newFacetDbg = newFacet;
                   Polytope lastRidgeDbg = lastRidge;
                   FacetChain facetChainDbg = facetChain;
-                  FacetChain result = facetChain.copy();
-//                    Map<Polytope, Polytope> replacements = new HashMap<Polytope, Polytope>();
-//                  Polytope newFacetCopy = newFacet.copy(replacements);
-//                  newFacetCopy.equate(compose(equivalences, replacements));
-                  Equivalences orgEqv = new Equivalences(equivalences);
-                  Polytope newFacetCopy = newFacet.copy(equivalences.p2p1);
-                  result.add(lastRidge, newFacetCopy);
+                  Map<Polytope, Polytope> replacements = new HashMap<Polytope, Polytope>();
+                  FacetChain result = facetChain.copyWorkInProgress(replacements);
+                  Polytope newFacetCopy = newFacet.copy(compose(equivalences.p2p1, replacements));
+//                  newFacetCopy.equate(compose(equivalences.p2p1, replacements));
+//                  Equivalences orgEqv = new Equivalences(equivalences);
+//                  Polytope newFacetCopy = newFacet.copy(equivalences.p2p1);
+//                  result.add(lastRidge, newFacetCopy);
+                  result.add(replacements.get(lastRidge), newFacetCopy);
 //                  return result;
+                  result.getWorkInProgress().check();
                   return waysToComplete(result);
                 })));
   }
