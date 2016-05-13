@@ -66,38 +66,43 @@ public class Edge extends Polytope {
   }
   
   @Override
-  protected boolean anchor(Polytope other, Map<Polytope, Polytope> equivalences) {
+  protected boolean anchor(Polytope other, Equivalences equivalences) {
     Iterator<Polytope> it = facets.iterator(); 
     Vertex v1 = (Vertex) it.next();
     Vertex v2 = (Vertex) it.next();
-    if (equivalences.containsKey(v1)) {
-      Vertex othersVertex = (Vertex) equivalences.get(v1);
+    if (equivalences.p1p2.containsKey(v1)) {
+      Vertex othersVertex = (Vertex) equivalences.p1p2.get(v1);
       Edge otherEdge = (Edge) other.getComponent(
-          e -> !equivalences.containsValue(e) && e.facets.contains(othersVertex));
+          e -> !equivalences.p2p1.containsKey(e) && e.facets.contains(othersVertex));
       Iterator<Polytope> it2 = otherEdge.facets.iterator();
       Vertex v12 = (Vertex) it2.next();
       Vertex v22 = (Vertex) it2.next();
-      if (equivalences.get(v1) == v12) {
-        equivalences.put(v2, v22);
+      if (equivalences.p1p2.get(v1) == v12) {
+        equivalences.p1p2.put(v2, v22);
+        equivalences.p2p1.put(v22, v2);
       } else {
-        equivalences.put(v2, v12);
+        equivalences.p1p2.put(v2, v12);
+        equivalences.p2p1.put(v12, v2);
       }
-    } else if (equivalences.containsKey(v2)) {
-      Vertex othersVertex = (Vertex) equivalences.get(v2);
+    } else if (equivalences.p1p2.containsKey(v2)) {
+      Vertex othersVertex = (Vertex) equivalences.p1p2.get(v2);
       Edge otherEdge = (Edge) other.getComponent(
-          e -> !equivalences.containsValue(e) && e.facets.contains(othersVertex));
+          e -> !equivalences.p2p1.containsKey(e) && e.facets.contains(othersVertex));
       Iterator<Polytope> it2 = otherEdge.facets.iterator();
       Vertex v12 = (Vertex) it2.next();
       Vertex v22 = (Vertex) it2.next();
-      if (equivalences.get(v2) == v12) {
-        equivalences.put(v1, v22);
+      if (equivalences.p1p2.get(v2) == v12) {
+        equivalences.p1p2.put(v1, v22);
+        equivalences.p2p1.put(v22, v1);
       } else {
-        equivalences.put(v1, v12);
+        equivalences.p1p2.put(v1, v12);
+        equivalences.p2p1.put(v12, v1);
       }
     } else {
       return false;
     }
-    equivalences.put(this, other);
+    equivalences.p1p2.put(this, other);
+    equivalences.p2p1.put(other, this);
     return true;
   }
 

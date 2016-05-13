@@ -44,17 +44,18 @@ public class Vertex extends Polytope {
   }
   
   @Override
-  public Stream<Map<Polytope, Polytope>> waysToEquate(Polytope other) {
+  public Stream<Equivalences> waysToEquate(Polytope other) {
     if (facets == null || other == null || n != other.n) {
       return Stream.empty();
     }
-    Map<Polytope, Polytope> result = new HashMap<Polytope, Polytope>();
-    result.put(this,  other);
+    Equivalences result = new Equivalences();
+    result.add(this, other);
     return Stream.of(result);
   }
   
-  protected boolean anchor(Polytope other, Map<Polytope, Polytope> equivalences) {
-    equivalences.put(this, other);
+  @Override
+  protected boolean anchor(Polytope other, Equivalences equivalences) {
+    equivalences.add(this, other);
     return true;
   }
   

@@ -202,7 +202,7 @@ public class Polytope {
     Set<String> definedNames = new HashSet<String>();
     StringBuilder stringBuilder = new StringBuilder();
     Map<Angle, String> angleNames = new HashMap<Angle, String>();
-    toString(true, stringBuilder, definedNames, angleNames);
+    toString(false, stringBuilder, definedNames, angleNames);
     return stringBuilder.toString();
   }
   // 0-polytope 1 Vertex
@@ -333,10 +333,13 @@ public class Polytope {
   // A cube can be equated to another in 48 ways (6 faces * 4 edges * 2 mirror).
   //
   // Pick any random facet. Find all facets in other that can be equated. Check if rest of polytope matches.
-  public Stream<Map<Polytope, Polytope>> waysToEquate(Polytope other) {
+  public Stream<Equivalences> waysToEquate(Polytope other) {
     // Some failfast optimizations
     if (facets == null || other == null || n != other.n || facets.size() != other.facets.size()) {
       return Stream.empty();
+    }
+    if (facets.size() < 1) {
+      throw new IllegalArgumentException("Should not happen");
     }
     // Random facet
     Polytope facet = facets.iterator().next();
@@ -347,15 +350,15 @@ public class Polytope {
 
   }
   // Can a given set of equivalences be extended in one and only one way to cover entire polytope?
-  protected boolean anchor(Polytope other, Map<Polytope, Polytope> equivalences) {
+  protected boolean anchor(Polytope other, Equivalences equivalences) {
     // We don't want to modify the original if anchor fails
-    Map<Polytope, Polytope> result = new HashMap<Polytope, Polytope>(equivalences);
+    Equivalences result = new Equivalences(equivalences);
     
     // All facets not already equivalent
     Set<Polytope> remaining = new HashSet<Polytope>(facets);
     Set<Polytope> remainingOther = new HashSet<Polytope>(other.facets);
-    remaining.removeAll(equivalences.keySet());
-    remainingOther.removeAll(equivalences.values());
+    remaining.removeAll(equivalences.p1p2.keySet());
+    remainingOther.removeAll(equivalences.p2p1.keySet());
     int last = remaining.size();
     
     // Extend equivalence to facets containing ridges already equivalent
@@ -364,15 +367,15 @@ public class Polytope {
       Set<Polytope> doneOther = new HashSet<Polytope>();
       for (Polytope facet: remaining) {
         for (Polytope ridge: facet.facets) {
-          if (equivalences.containsKey(ridge)) {
+          if (equivalences.p1p2.containsKey(ridge)) {
             Polytope neighborFacet = getOtherFacet(facet, ridge);
-            Polytope othersNeighborFacet = equivalences.get(neighborFacet);
-            Polytope othersRidge = equivalences.get(ridge);
+            Polytope othersNeighborFacet = equivalences.p1p2.get(neighborFacet);
+            Polytope othersRidge = equivalences.p1p2.get(ridge);
             Polytope newEquivalent = other.getOtherFacet(othersNeighborFacet, othersRidge);
             if (!facet.anchor(newEquivalent, equivalences)) {
               return false;
             }
-            equivalences.put(facet, newEquivalent);
+            equivalences.add(facet, newEquivalent);
             done.add(facet);
             doneOther.add(newEquivalent);
             break;
@@ -387,10 +390,10 @@ public class Polytope {
       }
       last = remaining.size();
     }
-    for (Polytope p: result.keySet()) {
-      equivalences.put(p, result.get(p));
+    for (Polytope p: result.p1p2.keySet()) {
+      equivalences.add(p, result.p1p2.get(p));
     }
-    equivalences.put(this, other);
+    equivalences.add(this, other);
     return true;
   }
 
@@ -404,19 +407,19 @@ public class Polytope {
   // For all ways of selecting a facet from this and one from other,
   // select all ways to equate the facets (possibly 0)
   // For instance with a triangular prism and a cube we can't connect the triangular faces
-  public Stream<Map<Polytope, Polytope>> waysToConnect(Polytope other) {
+  public Stream<Equivalences> waysToConnect(Polytope other) {
     return facets.stream().flatMap(
         // For each facet in this
         facet -> waysToConnect(other, facet));
   }
   // Find all ways this polytope can be connnected to the other using the specified facet
-  public Stream<Map<Polytope, Polytope>> waysToConnect(Polytope other, Polytope facet) {
+  public Stream<Equivalences> waysToConnect(Polytope other, Polytope facet) {
     // For each facet in other
     // All ways to equate
     return other.facets.stream().flatMap(otherFacet -> facet.waysToEquate(otherFacet));
   }
   // Find all ways this polytope can be connnected to both specified facets (which must be connected)
-  public Stream<Map<Polytope, Polytope>> waysToConnectFacets(Polytope f1, Polytope f2) {
+  public Stream<Equivalences> waysToConnectFacets(Polytope f1, Polytope f2) {
     // For each facet
     return facets.stream().flatMap(
     // For each neighbor facet
@@ -428,12 +431,12 @@ public class Polytope {
                 // And f2
                 equivalencesWithF1 -> neighbor.waysToEquate(f2)
                 // In such a way that the ridge is the same
-                  .filter(equivalencesWithF2 -> equivalencesWithF1.get(ridge) == equivalencesWithF2.get(ridge))
+                  .filter(equivalencesWithF2 -> equivalencesWithF1.p1p2.get(ridge) == equivalencesWithF2.p1p2.get(ridge))
                   .map(
                       equivalencesWithF2 -> {
-                      Map<Polytope, Polytope> result = new HashMap<Polytope, Polytope>(equivalencesWithF1);
-                      for (Polytope p: equivalencesWithF2.keySet()) {
-                        result.put(p, equivalencesWithF2.get(p));
+                      Equivalences result = new Equivalences(equivalencesWithF1);
+                      for (Polytope p: equivalencesWithF2.p1p2.keySet()) {
+                        result.add(p, equivalencesWithF2.p1p2.get(p));
                       }
                       return result;
                    })

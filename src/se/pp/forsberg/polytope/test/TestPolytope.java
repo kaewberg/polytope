@@ -32,6 +32,7 @@ import se.pp.forsberg.polytope.Edge;
 import se.pp.forsberg.polytope.Point;
 import se.pp.forsberg.polytope.Polytope;
 import se.pp.forsberg.polytope.Vertex;
+import se.pp.forsberg.polytope.solver.Equivalences;
 import se.pp.forsberg.polytope.swing.AnimatedPolytopeModel;
 import se.pp.forsberg.polytope.swing.BasicPolytopeModel;
 import se.pp.forsberg.polytope.swing.JPolytope;
@@ -463,9 +464,9 @@ public class TestPolytope {
     se.pp.forsberg.polytope.solver.Vertex v11 = new se.pp.forsberg.polytope.solver.Vertex();
     se.pp.forsberg.polytope.solver.Vertex v12 = new se.pp.forsberg.polytope.solver.Vertex();
     
-    List<Map<se.pp.forsberg.polytope.solver.Polytope, se.pp.forsberg.polytope.solver.Polytope>> eqvs = v11.waysToEquate(v12).collect(Collectors.toList());
+    List<Equivalences> eqvs = v11.waysToEquate(v12).collect(Collectors.toList());
     assertEquals(1, eqvs.size());
-    Map<se.pp.forsberg.polytope.solver.Polytope, se.pp.forsberg.polytope.solver.Polytope> eqv = eqvs.get(0);
+    Map<se.pp.forsberg.polytope.solver.Polytope, se.pp.forsberg.polytope.solver.Polytope> eqv = eqvs.get(0).p1p2;
     assertEquals(1, eqv.size());
     assertEquals(v12, eqv.get(v11));
 
@@ -475,7 +476,7 @@ public class TestPolytope {
     se.pp.forsberg.polytope.solver.Edge e12 = new se.pp.forsberg.polytope.solver.Edge(v12, v22);
     eqvs = e11.waysToEquate(e12).collect(Collectors.toList());
     assertEquals(2, eqvs.size());
-    eqvs.stream().forEach(m -> assertEquals(e12, m.get(e11)));
+    eqvs.stream().forEach(m -> assertEquals(e12, m.p1p2.get(e11)));
     
     se.pp.forsberg.polytope.solver.Vertex v31 = new se.pp.forsberg.polytope.solver.Vertex();
     se.pp.forsberg.polytope.solver.Vertex v32 = new se.pp.forsberg.polytope.solver.Vertex();
@@ -490,7 +491,7 @@ public class TestPolytope {
     eqvs = f11.waysToEquate(f12).collect(Collectors.toList());
     assertEquals(6, eqvs.size());
     eqvs.stream().forEach(m ->
-      assertEquals(f12, m.get(f11))
+      assertEquals(f12, m.p1p2.get(f11))
     );
     
     se.pp.forsberg.polytope.solver.Vertex v41 = new se.pp.forsberg.polytope.solver.Vertex();
@@ -519,7 +520,7 @@ public class TestPolytope {
     tetrahedron2.add(f12); tetrahedron2.add(f22); tetrahedron2.add(f32); tetrahedron2.add(f42);
     eqvs = tetrahedron1.waysToEquate(tetrahedron2).collect(Collectors.toList());
     assertEquals(24, eqvs.size());
-    eqvs.stream().forEach(m -> assertEquals(tetrahedron2, m.get(tetrahedron1)));
+    eqvs.stream().forEach(m -> assertEquals(tetrahedron2, m.p1p2.get(tetrahedron1)));
   }
   
   static Spliterator.OfInt takeWhile(
@@ -554,10 +555,10 @@ public class TestPolytope {
     return from(2).filter(n -> !takeWhile(primes(), p -> p < n).anyMatch(p -> n > p && ((n % p) == 0)));
   }
   
-  @Test
-  public void testPrimes() {
-    primes().limit(10).forEach(System.out::println);
-   }
+//  @Test
+//  public void testPrimes() {
+//    primes().limit(10).forEach(System.out::println);
+//   }
 
   private double[] flatten(double[]... arrays) {
     int length = 0;

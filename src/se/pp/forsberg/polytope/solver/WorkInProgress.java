@@ -4,7 +4,6 @@ import static java.lang.Math.PI;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -15,8 +14,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import se.pp.forsberg.polytope.solver.WorkInProgress.FacetChain;
-
 class WorkInProgress extends Polytope {
 
   // Facets around an corner
@@ -24,7 +21,7 @@ class WorkInProgress extends Polytope {
     Polytope corner;
     List<Polytope> facets = new ArrayList<Polytope>();
     List<Polytope> ridges = new ArrayList<Polytope>();
-    Map<Polytope, Polytope> equivalences;
+//    Map<Polytope, Polytope> equivalences;
     double angularSum = 0;
 
     public FacetChain(Polytope corner) {
@@ -60,15 +57,32 @@ class WorkInProgress extends Polytope {
         return false;
       }
       // All ways to equate the two unconnected ridges 
-      Optional<Map<Polytope, Polytope>> equivalences = lastRidge().waysToEquate(firstRidge())
+      Optional<Equivalences> equivalences = lastRidge().waysToEquate(firstRidge())
         // Such that the common corner is fixed
-        .filter(eqv -> deepEquivalent(eqv, corner))
+        .filter(eqv -> deepEquivalent(eqv.p1p2, corner))
         // There can be only one
         .findAny();
       if (!equivalences.isPresent()) {
         return false;
       }
-      lastRidge().equate(equivalences.get());
+      for (Polytope facet: facets) {
+        facet.equate(equivalences.get().p1p2);
+      }
+      return true;
+    }
+    public boolean canClose() {
+      if (facets.size() < 3) {
+        return false;
+      }
+      // All ways to equate the two unconnected ridges 
+      Optional<Equivalences> equivalences = lastRidge().waysToEquate(firstRidge())
+        // Such that the common corner is fixed
+        .filter(eqv -> deepEquivalent(eqv.p1p2, corner))
+        // There can be only one
+        .findAny();
+      if (!equivalences.isPresent()) {
+        return false;
+      }
       return true;
     }
     
@@ -92,6 +106,12 @@ class WorkInProgress extends Polytope {
       result.angularSum = angularSum;
       return result;
     }
+    @Override
+    public String toString() {
+      String names = this.facets.stream().map(facet -> facet.getName()).collect(Collectors.toList()).toString();
+      return corner.toString().trim() + ' ' + names;
+    }
+
   }
   Map<Polytope, FacetChain> finishedCorners = new HashMap<Polytope, FacetChain>();
   
@@ -112,7 +132,12 @@ class WorkInProgress extends Polytope {
   }
   public static Polytope equivalent(Map<Polytope, Polytope> equivalences, Polytope p) {
     Polytope equivalent = equivalences.get(p);
-    return equivalent == null? p : equivalent;
+    if (equivalent == null) {
+      p.equate(equivalences);
+      return p;
+//      return p.copy(equivalences);
+    }
+    return equivalent;
   }
   public WorkInProgress(FacetChain facetChain) {
     super(facetChain.facets.get(0).n + 1);
@@ -254,6 +279,11 @@ class WorkInProgress extends Polytope {
     if (!reachableFacets.equals(facets)) {
       throw new IllegalArgumentException("Disconnected polytope");
     }
+    Set<Polytope> ridges = stream().filter(ridge -> ridge.n == n-2).collect(Collectors.toSet());
+    Set<Polytope> ridgesWithAngles = new HashSet<Polytope>(ridgeAngles.keySet());
+    if (!ridges.equals(ridgesWithAngles)) {
+      throw new IllegalArgumentException("Not all angles determined");
+    }
   }
   /**
    * Create a set of all facets reachable from the specified facet by moving to neighbors
@@ -284,9 +314,103 @@ class WorkInProgress extends Polytope {
       return (WorkInProgress) replacementMap.get(this);
     }
     WorkInProgress p = new WorkInProgress(n);
-    p.copyCommon(p, replacementMap);
-    // TODO copyWiP();
+    copyCommon(p, replacementMap);
+    for (Polytope corner: finishedCorners.keySet()) {
+      p.finishedCorners.put(replacementMap.get(corner), finishedCorners.get(corner).copy(replacementMap));
+    }
     return p;
+  }
+  // Combine any ridges containing the same corners
+  public void coalesceRidges() {
+    Map<Polytope, Polytope> equivalences = new HashMap<Polytope, Polytope>();
+    Set<Polytope> ridges = facets.stream().flatMap(facet -> facet.facets.stream()).collect(Collectors.toSet());
+    for (Polytope ridge: ridges) {
+      if (equivalences.keySet().contains(ridge)) {
+        continue;
+      }
+      facets.stream().flatMap(facet -> facet.facets.stream())
+        .filter(ridge2 ->  ridge2 != ridge && ridge2.facets.equals(ridge.facets))
+        .forEach(ridge2 -> equivalences.put(ridge2, ridge));
+    }
+    equate(equivalences);
+  }
+  public boolean solveAngles() {
+    // Simultaneously solve all dihedral angles...
+    // Example: octahedron
+    //        p1
+    //  p2  p3   p4  p5   
+    //        p6
+    // f1 = p1p2p3
+    // f2 = p1p3p4
+    // f3 = p1p4p5
+    // f4 = p1p5p2
+    // f5 = p6p2p3
+    // f6 = p6p3p4
+    // f7 = p6p4p5
+    // f8 = p6p5p2
+    //
+    // general relations for three polytopes around an corner
+    //
+    // dihedral angles given facet angles
+    // cos(v12) = (cos(v3) - cos(v1)*cos(v2))/(sin(v1)*sin(v2)))
+    // cos(v23) = (cos(v1) - cos(v2)*cos(v3))/(sin(v2)*sin(v3)))
+    // cos(v31) = (cos(v2) - cos(v3)*cos(v1))/(sin(v3)*sin(v1)))
+    
+    // facet angles given two other facet angles and one dihedral angle
+    // cos(v1) = cos(v23)sin(v2)sin(v3) + cos(v2)cos(v3)
+    // cos(v2) = cos(v31)sin(v3)sin(v1) + cos(v3)cos(v1)
+    // cos(v3) = cos(v12)sin(v1)sin(v2) + cos(v1)cos(v2)
+    //
+    // Four polytopes around an corner can be decomposed into two merged instances of three around a corner
+    // This corresponds to halving a baseless square pyramid
+    // Given facet angles for the square pyramid with apex at p1 are v1 v2 v3 v4
+    // There is an unknown top angle for the halves, t1
+    // cos(v12) = (cos(t1) - cos(v1)*cos(v2))/(sin(v1)*sin(v2)))
+    // cos(v2t) = (cos(v1) - cos(v2)*cos(t1))/(sin(v2)*sin(t1)))
+    // cos(v1t) = (cos(v2) - cos(t1)*cos(v1))/(sin(t1)*sin(v1)))
+    // cos(v34) = (cos(t1) - cos(v3)*cos(v4))/(sin(v3)*sin(v4)))
+    // cos(v4t) = (cos(v3) - cos(v4)*cos(t1))/(sin(v4)*sin(t1)))
+    // cos(v3t) = (cos(v4) - cos(t1)*cos(v3))/(sin(t1)*sin(v3)))
+    // v23 = v2t+v3t
+    // v41 = v1t+v4t
+    // And we want the four dihedral angles
+    // v12 v23 v34 v41. 5 unknowns, four givens
+    // Form similar equation systems for all vertices
+    // cos(v12) = (cos(t2) - cos(v1)*cos(v2))/(sin(v1)*sin(v2))) <-
+    // cos(v2t) = (cos(v1) - cos(v2)*cos(t2))/(sin(v2)*sin(t2)))
+    // cos(v1t) = (cos(v2) - cos(t2)*cos(v1))/(sin(t1)*sin(v1)))
+    // cos(v65) = (cos(t2) - cos(v6)*cos(v5))/(sin(v6)*sin(v5)))
+    // cos(v5t) = (cos(v6) - cos(v5)*cos(t2))/(sin(v5)*sin(t2)))
+    // cos(v6t) = (cos(v5) - cos(t2)*cos(v6))/(sin(t1)*sin(v6)))
+    // Marked equation establishes that t1 == t2
+    // Lots of work.
+    // New insight:
+    // Any corner having 4+ facets around it that form a generalized baseless pyramid
+    // (Example 3d: facets around a corner in an icosahedron form a baseless pentagonal pyramid)
+    // can be sliced away to leave a polytope having one less corner, and fewer polytopes per corner
+    // In the icosahedron example, three slices are enough to make the dihedral angles trivial to calculate.
+    // This procedure should solve all the Johnsson bodies.
+
+    // Anyways, lets first handle the special case of only three polytopes around each corner
+    finishedCorners.values().stream().filter(chain -> chain.facets.size() == 3).forEach(chain -> solve3(chain));
+    validate();
+    return true;
+  }
+ 
+  private void solve3(FacetChain chain) {
+    Fold3Solution angles = Fold3Solution.givenFacetAngles(
+        chain.facets.get(0).getAngle(chain.corner),
+        chain.facets.get(1).getAngle(chain.corner),
+        chain.facets.get(2).getAngle(chain.corner));
+    if (!ridgeAngles.containsKey(chain.ridges.get(0))) {
+      setAngle(chain.ridges.get(0), angles.v31);
+    }
+    if (!ridgeAngles.containsKey(chain.ridges.get(1))) {
+      setAngle(chain.ridges.get(1), angles.v12);
+    }
+    if (!ridgeAngles.containsKey(chain.ridges.get(2))) {
+      setAngle(chain.ridges.get(2), angles.v23);
+    }
   }
 
 }
