@@ -7,6 +7,9 @@ import java.util.Map;
 // "Exact angles" using symbolic notation
 public abstract class Angle {
   
+
+
+
   public abstract double getAngle();
   
   public static class RationalPi extends Angle {
@@ -67,6 +70,53 @@ public abstract class Angle {
       }
       RationalPi other = (RationalPi) obj;
       return nominator == other.nominator && denominator == other.denominator;
+    }
+  }
+  
+  public static class RationalAcos extends Angle {
+    private final int multiplier, nominator, denominator;
+    public RationalAcos(int multiplier, int nominator, int denominator) {
+      this.multiplier = multiplier; 
+      if (denominator < 0) {
+        denominator = -denominator;
+        nominator = -nominator;
+      }
+      // normalize to -PI - PI
+      while (nominator < -denominator) {
+        nominator += 2*denominator;
+      }
+      while (nominator > denominator) {
+        nominator -= 2*denominator;
+      }
+      int gcd = gcd(nominator, denominator);
+      nominator /= gcd;
+      denominator /= gcd;
+      this.nominator = nominator;
+      this.denominator = denominator;
+    }
+    private int gcd(int a, int b) {
+      // \gcd(a,0) = a
+      // \gcd(a,b) = \gcd(b, a \,\mathrm{mod}\, b),
+      if (b == 0) {
+        return a;
+      }
+      return gcd(b, a % b);
+    }
+    @Override
+    public double getAngle() {
+      return multiplier*acos(nominator / denominator);
+    }
+    @Override
+    public String toString() {
+      return ((multiplier == 1)? "" : (multiplier + "*")) + "acos(" + nominator + "/" + denominator + ")";
+    }
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof RationalAcos)) {
+        return false;
+      }
+      RationalAcos other = (RationalAcos) obj;
+      return multiplier == other.multiplier && nominator == other.nominator && denominator == other.denominator;
     }
   }
   
@@ -159,6 +209,16 @@ public abstract class Angle {
     @Override
     public int hashCode() {
       return v1.hashCode() ^ v2.hashCode() ^ v3.hashCode() ^ v4.hashCode() ^ v5.hashCode() ^ value.hashCode();
+    }
+  }
+  public static class Unknown extends Angle {
+    @Override
+    public double getAngle() {
+      throw new IllegalArgumentException("Attempt to get value of unknowm angle");
+    }
+    @Override
+    public String toString() {
+      return "<Unknown>";
     }
   }
 

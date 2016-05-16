@@ -49,6 +49,7 @@ public class PolytopeSolver {
     WorkInProgress p;
     private int ids[];
     public StartingPoint(WorkInProgress p) {
+      p.toString();
       this.p = p;
       ids = new int[p.facets.size()];
       int i = 0;
@@ -98,7 +99,7 @@ public class PolytopeSolver {
     }
     @Override
     public String toString() {
-      return "\n" + p.toString(false);
+      return "\r\n" + p.toString();
     }
     public String shortDescription() {
       String[] result = new String[ids.length];
@@ -117,12 +118,14 @@ public class PolytopeSolver {
     continuePrevious();
   }
 
-  Pattern polytopeDefinition = Pattern.compile("^(\\d+)-polytope (\\d+) (\\w+)");
-  Pattern facetDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)((\\s+(\\w+)-(\\d+))*)");
-  Pattern facetDefinition2 = Pattern.compile("\\s+(\\w+)-(\\d+)");
+  Pattern polytopeDefinition = Pattern.compile("^(\\d+)-polytope (-?\\d+) (\\w+)(@\\d+)?");
+  Pattern facetDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)(@\\d+)?((\\s+(\\w+)-(\\d+)(@\\d+)?)*)");
+  Pattern facetDefinition2 = Pattern.compile("\\s+(\\w+)-(\\d+)(@\\d+)?");
   Pattern angleDefinition = Pattern.compile("^\\s+v(\\d+) (.*)");
-  Pattern ridgeAngleDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)\\s+(\\w+)-(\\d+)\\s+(\\w+)-(\\d+)\\sv(\\d+)");
+  Pattern partialRidgeDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?$");
+  Pattern ridgeAngleDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?\\sv(\\d+)");
   Pattern rationalPi = Pattern.compile("^(\\d*)PI(/(\\d+))?$");
+  Pattern rationalAcos = Pattern.compile("^(\\d+\\*)?acos\\((\\d+)/(\\d+)\\)$");
   Pattern startingPointDefinition = Pattern.compile("^Currently trying");
   
   private void continuePrevious() {
@@ -151,14 +154,14 @@ public class PolytopeSolver {
         byDimension.add(p);
         nameToPolytopeMap.put(p.getName(), p);
       }
-      // After main definitions we expect a line, then current starting point
-      if ((line = line(in, lineNumber)) == null) {
-        throw new IOException("Line " + lineNumber[0] + ": Syntax error on line " + line);
-      }
-      Matcher match = startingPointDefinition.matcher(line);
-      if (!match.matches()) {
-        throw new IOException("Line " + lineNumber[0] + ": Invalid starting point " + line);
-      }
+//      // After main definitions we expect a line, then current starting point
+//      if ((line = line(in, lineNumber)) == null) {
+//        throw new IOException("Line " + lineNumber[0] + ": Syntax error on line " + line);
+//      }
+//      Matcher match = startingPointDefinition.matcher(line);
+//      if (!match.matches()) {
+//        throw new IOException("Line " + lineNumber[0] + ": Invalid starting point " + line);
+//      }
       // Starting point currently is a WorkInProgress
       startingPoint = new StartingPoint(readPolytope(in, angles, WorkInProgress.class, lineNumber));
     } catch (Exception e) {
@@ -222,9 +225,13 @@ public class PolytopeSolver {
     if (line == null) {
       return null;
     }
-    Matcher match = polytopeDefinition.matcher(line);
-    if (!match.matches()) {
+    Matcher match = startingPointDefinition.matcher(line);
+    if (match.matches()) {
       return null;
+    }
+    match = polytopeDefinition.matcher(line);
+    if (!match.matches()) {
+      throw new IOException("Line " + lineNumber[0] +": Expected polytope definition or starting point definition");
     }
     int n = Integer.parseInt(match.group(1));
     int id = Integer.parseInt(match.group(2));
@@ -241,7 +248,7 @@ public class PolytopeSolver {
       }
       String facetName = match.group(1);
       int facetId = Integer.parseInt(match.group(2));
-      String ridgeList = match.group(3);
+      String ridgeList = match.group(4);
       Polytope facet = get(facetName).copy();
       Map<String, List<Polytope>> facetRidges = new HashMap<String, List<Polytope>>();
       for (Polytope ridge: facet.facets) {
@@ -261,6 +268,7 @@ public class PolytopeSolver {
         Polytope oldRidge = safeGet(ridges, ridgeName, ridgeId);
         if (oldRidge != null) {
           equivalences.put(facetRidges.get(ridgeName).get(i), oldRidge);
+          // Won't do! We have to have a complete wayToEquate, and that can only be found by looking at all previously defined edges...
         } else {
           safePut(ridges, ridgeName, ridgeId, facetRidges.get(ridgeName).get(i));
         }
@@ -283,39 +291,55 @@ public class PolytopeSolver {
         int denominator = match.group(2).isEmpty()? 1 : Integer.parseInt(match.group(3));
         angles.add(id, new Angle.RationalPi(nominator, denominator));
       } else {
-        throw new IOException("Line " + lineNumber[0] + ": Syntax error on angle definition " + definition);
+        match = rationalAcos.matcher(definition);
+        if (match.matches()) {
+          int multiplier = match.group(1) == null? 1 : Integer.parseInt(match.group(1).substring(0,  match.group(1).length()-1));
+          int nominator = Integer.parseInt(match.group(2));
+          int denominator = Integer.parseInt(match.group(3));
+          angles.add(id,  new Angle.RationalAcos(multiplier, nominator, denominator));
+        } else {
+          throw new IOException("Line " + lineNumber[0] + ": Syntax error on angle definition " + definition);
+        }
       }
       line = line(in, lineNumber);
     }
     while (line != null && !line.startsWith("-----")) {
-      match = ridgeAngleDefinition.matcher(line);
+      match = partialRidgeDefinition.matcher(line);
       if (!match.matches()) {
-        break;
+        match = ridgeAngleDefinition.matcher(line);
+        if (!match.matches()) {
+          break;
+        }
+        String ridgeName = match.group(1);
+        int ridgeId = Integer.parseInt(match.group(2));
+        String facetName1 = match.group(4);
+        int facetId1 = Integer.parseInt(match.group(5));
+        String facetName2 = match.group(7);
+        int facetId2 = Integer.parseInt(match.group(8));
+        int angleId = Integer.parseInt(match.group(10));
+        Polytope ridge = safeGet(ridges, ridgeName, ridgeId);
+        Polytope facet1 = safeGet(facets, facetName1, facetId1);
+        Polytope facet2 = safeGet(facets, facetName2, facetId2);
+        if (angles.size() <= angleId) {
+          angles.add(angleId, new Angle.Unknown());
+        }
+        Angle angle = angles.get(angleId);
+        if (ridge == null) {
+          throw new IOException("Line " + lineNumber[0] + ": Undefined ridge " + ridgeName + "-" + ridgeId + " in " + line);
+        }
+        if (facet1 == null) {
+          throw new IOException("Line " + lineNumber[0] + ": Undefined facet " + facetName1 + "-" + facetId1 + " in " + line);
+        }
+        if (facet2 == null) {
+          throw new IOException("Line " + lineNumber[0] + ": Undefined facet " + facetName2 + "-" + facetId2 + " in " + line);
+        }
+        if (angle == null) {
+          throw new IOException("Line " + lineNumber[0] + ": Undefined angle v" + angleId + " in " + line);
+        }
+        if (!(angle instanceof Angle.Unknown)) {
+          p.setAngle(ridge, angle);
+        }
       }
-      String ridgeName = match.group(1);
-      int ridgeId = Integer.parseInt(match.group(2));
-      String facetName1 = match.group(3);
-      int facetId1 = Integer.parseInt(match.group(4));
-      String facetName2 = match.group(5);
-      int facetId2 = Integer.parseInt(match.group(6));
-      int angleId = Integer.parseInt(match.group(7));
-      Polytope ridge = safeGet(ridges, ridgeName, ridgeId);
-      Polytope facet1 = safeGet(facets, facetName1, facetId1);
-      Polytope facet2 = safeGet(facets, facetName2, facetId2);
-      Angle angle = angles.get(angleId);
-      if (ridge == null) {
-        throw new IOException("Line " + lineNumber[0] + ": Undefined ridge " + ridgeName + "-" + ridgeId + " in " + line);
-      }
-      if (facet1 == null) {
-        throw new IOException("Line " + lineNumber[0] + ": Undefined facet " + facetName1 + "-" + facetId1 + " in " + line);
-      }
-      if (facet2 == null) {
-        throw new IOException("Line " + lineNumber[0] + ": Undefined facet " + facetName2 + "-" + facetId2 + " in " + line);
-      }
-      if (angle == null) {
-        throw new IOException("Line " + lineNumber[0] + ": Undefined angle v" + angleId + " in " + line);
-      }
-      p.setAngle(ridge, angle);
       line = line(in, lineNumber);
     }
     return p;
@@ -364,17 +388,17 @@ public class PolytopeSolver {
 
   private synchronized void spool(StartingPoint startingPoint) {
     try (PrintStream out =  new PrintStream(spoolFile)) {
-      Set<String> definedNames = new HashSet<String>();
-      Map<Angle, String> angleNames = new HashMap<Angle, String>();
+      Map<Angle, Integer> definedAngles = new HashMap<Angle, Integer>();
+      List<Angle> angles  = new ArrayList<Angle>();
       for (int i = 0; solvedByDimension.containsKey(i); i++) {
         for (Polytope p: solvedByDimension.get(i)) {
           StringBuilder stringBuilder = new StringBuilder();
-          p.toString(false, stringBuilder, definedNames, angleNames);
+          p.toString(stringBuilder, definedAngles, angles);
           out.println(stringBuilder.toString());
           out.println("----------------------------------------------");
         }
       }
-      out.println("Currently trying " + startingPoint);
+      out.println("Currently trying" + startingPoint);
     } catch (FileNotFoundException e) {
       System.err.println("Spool failure!");
       e.printStackTrace();
@@ -384,7 +408,7 @@ public class PolytopeSolver {
   private void add(Polytope p) {
     int d = p.getDimensions();
     int n = (solvedByDimension.get(d) == null)? 0 : solvedByDimension.get(d).size();
-    add(p, "p" + d + "-" + n);
+    add(p, "p" + d + "_" + n);
   }
   private void add(Polytope p, String name) {
     List<Polytope> polytopesForDimension = solvedByDimension.get(p.getDimensions());
@@ -583,7 +607,7 @@ public class PolytopeSolver {
   }
 
   private void solve(int n, StartingPoint startingPoint) {
-    waysToSolve(startingPoint.p).forEach(p -> add(p));
+    waysToSolve(startingPoint.p).forEach(p -> { add(p); spool(startingPoint); });
   }
   // Ways to complete a partially constructed polytope
   // General rule, whenever we return a stream of options based on a initial value,

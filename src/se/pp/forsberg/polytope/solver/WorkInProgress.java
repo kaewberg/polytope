@@ -50,6 +50,7 @@ class WorkInProgress extends Polytope {
       ridges.add(ridge);
       facets.add(facet);
       angularSum += angle;
+      
       return true;
     }
     public Polytope firstRidge() {
@@ -475,7 +476,34 @@ class WorkInProgress extends Polytope {
 
   private void solve4(FacetChain chain) {
     // Find given dihedral angle (if any)
-    if (chain.)
+    int given = -1;
+    for (int i = 0; i < 4; i++) {
+      if (ridgeAngles.containsKey(chain.ridges.get(i))) {
+        given = i;
+        break;
+      }
+    }
+    if (given < 0) {
+      return;
+    }
+    Fold4Solution angles = Fold4Solution.givenFacetAnglesAndOneDihedralAngle(
+        chain.facets.get((given+3)%4).getAngle(chain.corner), 
+        chain.facets.get((given+0)%4).getAngle(chain.corner),
+        chain.facets.get((given+1)%4).getAngle(chain.corner),
+        chain.facets.get((given+2)%4).getAngle(chain.corner),
+        ridgeAngles.get(chain.ridges.get(given)));
+    if (!ridgeAngles.containsKey(chain.ridges.get(0))) {
+      setAngle(chain.ridges.get(0), angles.v41);
+    }
+    if (!ridgeAngles.containsKey(chain.ridges.get(1))) {
+      setAngle(chain.ridges.get(1), angles.v12);
+    }
+    if (!ridgeAngles.containsKey(chain.ridges.get(2))) {
+      setAngle(chain.ridges.get(2), angles.v23);
+    }
+    if (!ridgeAngles.containsKey(chain.ridges.get(3))) {
+      setAngle(chain.ridges.get(3), angles.v34);
+    }
   }
   public FacetChain newFacetChain(Polytope corner) {
     return new FacetChain(corner);
