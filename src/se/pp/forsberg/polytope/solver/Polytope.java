@@ -14,17 +14,15 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import sun.reflect.ReflectionFactory.GetReflectionFactoryAction;
-
 
 public class Polytope {
 
   protected final int n;
-  protected final Set<Polytope> facets = new HashSet<Polytope>();
-  protected final Map<Polytope, Angle> ridgeAngles = new HashMap<Polytope, Angle>();
+  protected Set<Polytope> facets = new HashSet<Polytope>();
+  protected Map<Polytope, Angle> ridgeAngles = new HashMap<Polytope, Angle>();
   private String name;
   protected int id = -1;
-  private static final boolean DEBUG = true;
+  protected static final boolean DEBUG = true;
   
   public Polytope(int n) {
     this.n = n;
@@ -336,15 +334,21 @@ public class Polytope {
     Map<Integer, Set<String>> typesPerDimension = new HashMap<Integer, Set<String>>();
     Map<String, List<Polytope>> polytopesPerType = new HashMap<String, List<Polytope>>();
     Map<Pair<Polytope>, Angle> ridgeToAngleMap = new HashMap<Pair<Polytope>, Angle>();
+    Set<Angle> previouslyDefinedAngles = new HashSet<Angle>(definedAngles.keySet());
     
     String name = getName();
-    stringBuilder.append(n).append("-polytope ").append(id).append(' ').append(name).append("\r\n");
+    stringBuilder.append(n).append("-polytope ").append(id).append(' ').append(name);
+    if (DEBUG) {
+      stringBuilder.append('@').append(System.identityHashCode(this));
+    }
+    stringBuilder.append("\r\n");
     // Step 0) Collect names
     for (int i = 0; i < n; i++) {
       int dimension = i;
       stream().filter(p -> p.n == dimension).forEach(p ->
         p.collectDefinitions(polytopeNames, typesPerDimension, polytopesPerType, definedAngles, angles, ridgeToAngleMap));
     }
+    collectDefinitions(polytopeNames, typesPerDimension, polytopesPerType, definedAngles, angles, ridgeToAngleMap);
     // Step 1) Print all subcomponents starting with edges
     for (int d = 1; d < n; d++) {
       List<String> types = new ArrayList<String>(typesPerDimension.get(d));
@@ -352,7 +356,16 @@ public class Polytope {
       for (String type: types) {
         for (Polytope p: polytopesPerType.get(type)) {
           stringBuilder.append("  ").append(polytopeNames.get(p));
-          List<String> facets = p.facets.stream().map(facet -> polytopeNames.get(facet)).collect(Collectors.toList());
+          if (DEBUG) {
+            stringBuilder.append('@').append(System.identityHashCode(p));
+          }
+          List<String> facets = p.facets.stream().map(facet -> { 
+            String result = polytopeNames.get(facet);
+            if (DEBUG) {
+              result += "@" + System.identityHashCode(facet);
+            }
+            return result;
+            }).collect(Collectors.toList());
           Collections.sort(facets);
           for (String facet: facets) {
             stringBuilder.append(' ').append(facet);
@@ -364,9 +377,20 @@ public class Polytope {
     // Step 2) Print angle definitions
     for (int i = 0; i < angles.size(); i++) {
       Angle angle = angles.get(i);
+      if (angle instanceof Angle.Unknown) {
+        continue;
+      }
+      if (previouslyDefinedAngles.contains(angle)) {
+        continue;
+      }
       stringBuilder.append("  v").append(i).append(' ').append(angle).append("\r\n");
     }
     // Step 3) Recursively print angles between subcomponents
+    for (int i = 2; i < n; i++) {
+      int dimension = i;
+      stream().filter(p -> p.n == dimension).forEach(p ->
+        p.toStringAngles(stringBuilder, polytopeNames, definedAngles, angles, ridgeToAngleMap));
+    }
     toStringAngles(stringBuilder, polytopeNames, definedAngles, angles, ridgeToAngleMap);
   }
   private void collectDefinitions(Map<Polytope, String> polytopeNames, Map<Integer, Set<String>> typesPerDimension, Map<String, List<Polytope>> polytopesPerType, Map<Angle, Integer> definedAngles, List<Angle> angles, Map<Pair<Polytope>, Angle> ridgeToAngleMap) {
@@ -400,25 +424,42 @@ public class Polytope {
       if (!definedAngles.containsKey(angle)) {
         definedAngles.put(angle, angles.size());
         angles.add(angle);
-        Iterator<Polytope> facets = ridgeToFacetMap.get(ridge).iterator();
-        ridgeToAngleMap.put(new Pair<Polytope>(facets.next(), facets.next()), angle);
       }
+      Iterator<Polytope> facets = ridgeToFacetMap.get(ridge).iterator();
+      ridgeToAngleMap.put(new Pair<Polytope>(facets.next(), facets.next()), angle);
     }
   }
 
   private void toStringAngles(StringBuilder stringBuilder, Map<Polytope, String> definedPolytopes, Map<Angle, Integer> definedAngles, List<Angle> angles, Map<Pair<Polytope>, Angle> ridgeToAngleMap) {
+    
 //    for (Polytope facet: facets) {
 //      facet.toStringAngles(stringBuilder, definedPolytopes, definedAngles, angles, ridgeToAngleMap);
 //    }
     Map<Polytope, Set<Polytope>> ridgeToFacetMap = getRidgeToFacetMap();
-    List<Polytope> ridges = new ArrayList<Polytope>(ridgeToFacetMap.keySet());
-    Collections.sort(ridges, (r1, r2) -> definedPolytopes.get(r1).compareTo(definedPolytopes.get(r2)));
-    for (Polytope ridge: ridges) {
+    List<Pair<Polytope>> ridges = ridgeToFacetMap.keySet().stream().filter(ridge -> ridgeToFacetMap.get(ridge).size() == 2).map(ridge -> new Pair<Polytope>(ridgeToFacetMap.get(ridge))).collect(Collectors.toList());
+    Comparator<Polytope> polytopeComparator = (p1, p2) -> definedPolytopes.get(p1).compareTo(definedPolytopes.get(p2));
+    Comparator<Pair<Polytope>> pairComparator = (p1, p2) -> {
+      Polytope p11 = p1.getFirst(polytopeComparator);
+      Polytope p12 = p1.getSecond(polytopeComparator);
+      Polytope p21 = p2.getFirst(polytopeComparator);
+      Polytope p22 = p2.getSecond(polytopeComparator);
+      int result = polytopeComparator.compare(p11, p21);
+      if (result != 0) {
+        return result;
+      }
+      return polytopeComparator.compare(p12, p22);
+    };
+    //    List<Polytope> ridges = new ArrayList<Polytope>(ridgeToFacetMap.keySet());
+    Collections.sort(ridges, pairComparator);
+    for (Pair<Polytope> ridge: ridges) {
       Angle angle = ridgeToAngleMap.get(ridge);
       if (angle == null) {
         continue;
       }
-      stringBuilder.append("  ").append(definedPolytopes.get(ridge)).append(" v").append(definedAngles.get(angle));
+      stringBuilder.append("  ")
+        .append(definedPolytopes.get(ridge.getFirst(polytopeComparator))).append(' ')
+        .append(definedPolytopes.get(ridge.getSecond(polytopeComparator)))
+        .append(" v").append(definedAngles.get(angle)).append("\r\n");
     }
   }
 
@@ -469,6 +510,7 @@ public class Polytope {
     Optional<Polytope> result = stream().filter(predicate).findAny();
     if (!result.isPresent()) {
       System.out.println("Ooops");
+      return null;
     }
     return result.get();
   }
@@ -520,6 +562,10 @@ public class Polytope {
             Polytope othersNeighborFacet = equivalences.p1p2.get(neighborFacet);
             Polytope othersRidge = equivalences.p1p2.get(ridge);
             Polytope newEquivalent = other.getOtherFacet(othersNeighborFacet, othersRidge);
+            // Slightly suspect, I don't fully understand when this happens
+            if (newEquivalent == null) {
+              return false;
+            }
             if (!facet.anchor(newEquivalent, equivalences)) {
               return false;
             }
@@ -594,62 +640,78 @@ public class Polytope {
   // Better equate, operate on a whole map of equivalences (such as returned by waysToEquate or wasyToConnect)
   
   // Recursively replaces any references of components mentioned in equivalences with their equivalents
-  public void equate(Map<Polytope, Polytope> equivalences) {
-    for (int d = 1; d < n; d++) {
-      final int d2 = d;
-      // Operate on copy to avoid concurrent modification
-      stream().filter(p -> p.n == d2).collect(Collectors.toSet()).stream().forEach(p -> {
-        if (equivalences.containsKey(p)) {
-          return;
-        }
-        Set<Polytope> removals = new HashSet<Polytope>();
-        Set<Polytope> additions = new HashSet<Polytope>();
-        for (Polytope facet: p.facets) {
-          Polytope replacement = equivalences.get(facet);
-          if (replacement != null) {
-            removals.add(facet);
-            additions.add(replacement);
-          }
-        }
-        if (!removals.isEmpty() || !additions.isEmpty()) {
-          p.facets.removeAll(removals);
-          p.facets.addAll(additions);
-        }
-      });
+  public Polytope equate(Map<Polytope, Polytope> equivalences) {
+    if (equivalences.containsKey(this)) {
+      return equivalences.get(this);
     }
-    Set<Polytope> removals = new HashSet<Polytope>();
-    Set<Polytope> additions = new HashSet<Polytope>();
-    for (Polytope facet: this.facets) {
-      Polytope replacement = equivalences.get(facet);
-      if (replacement != null) {
-        removals.add(facet);
-        additions.add(replacement);
-      }
+    Set<Polytope> newFacets = new HashSet<Polytope>();
+    for (Polytope facet: facets) {
+      newFacets.add(facet.equate(equivalences));
     }
-    if (!removals.isEmpty() || !additions.isEmpty()) {
-      if (facets.size() + additions.size() - removals.size() < n) {
-        throw new IllegalArgumentException("Logic error, to few facets after equating");
-      }
-      facets.removeAll(removals);
-      facets.addAll(additions);
-    }
-    Set<Polytope> angleRemovals = new HashSet<Polytope>();
-    Map<Polytope, Angle> angleAdditions = new HashMap<Polytope, Angle>();
+    facets = newFacets;
+    Map<Polytope, Angle> newRidgeAngles = new HashMap<Polytope, Angle>();
     for (Polytope ridge: ridgeAngles.keySet()) {
-      if (equivalences.containsKey(ridge)) {
-        angleRemovals.add(ridge);
-        angleAdditions.put(equivalences.get(ridge), ridgeAngles.get(ridge));
-      }
+      newRidgeAngles.put(ridge.equate(equivalences), ridgeAngles.get(ridge));
     }
-    if (!angleRemovals.isEmpty() || !angleAdditions.isEmpty()) {
-      for (Polytope ridge: angleRemovals) {
-        ridgeAngles.remove(ridge);
-      }
-      for (Polytope ridge: angleAdditions.keySet()) {
-        ridgeAngles.put(ridge, angleAdditions.get(ridge));
-      }
-    }
+    ridgeAngles = newRidgeAngles;
+    return this;
   }
+//  public void equate(Map<Polytope, Polytope> equivalences) {
+//    for (int d = 1; d < n; d++) {
+//      final int d2 = d;
+//      // Operate on copy to avoid concurrent modification
+//      stream().filter(p -> p.n == d2).collect(Collectors.toSet()).stream().forEach(p -> {
+////        if (equivalences.containsKey(p)) {
+////          return;
+////        }
+//        Set<Polytope> removals = new HashSet<Polytope>();
+//        Set<Polytope> additions = new HashSet<Polytope>();
+//        for (Polytope facet: p.facets) {
+//          Polytope replacement = equivalences.get(facet);
+//          if (replacement != null) {
+//            removals.add(facet);
+//            additions.add(replacement);
+//          }
+//        }
+//        if (!removals.isEmpty() || !additions.isEmpty()) {
+//          p.facets.removeAll(removals);
+//          p.facets.addAll(additions);
+//        }
+//      });
+//    }
+//    Set<Polytope> removals = new HashSet<Polytope>();
+//    Set<Polytope> additions = new HashSet<Polytope>();
+//    for (Polytope facet: this.facets) {
+//      Polytope replacement = equivalences.get(facet);
+//      if (replacement != null) {
+//        removals.add(facet);
+//        additions.add(replacement);
+//      }
+//    }
+//    if (!removals.isEmpty() || !additions.isEmpty()) {
+//      if (facets.size() + additions.size() - removals.size() < n) {
+//        throw new IllegalArgumentException("Logic error, to few facets after equating");
+//      }
+//      facets.removeAll(removals);
+//      facets.addAll(additions);
+//    }
+//    Set<Polytope> angleRemovals = new HashSet<Polytope>();
+//    Map<Polytope, Angle> angleAdditions = new HashMap<Polytope, Angle>();
+//    for (Polytope ridge: ridgeAngles.keySet()) {
+//      if (equivalences.containsKey(ridge)) {
+//        angleRemovals.add(ridge);
+//        angleAdditions.put(equivalences.get(ridge), ridgeAngles.get(ridge));
+//      }
+//    }
+//    if (!angleRemovals.isEmpty() || !angleAdditions.isEmpty()) {
+//      for (Polytope ridge: angleRemovals) {
+//        ridgeAngles.remove(ridge);
+//      }
+//      for (Polytope ridge: angleAdditions.keySet()) {
+//        ridgeAngles.put(ridge, angleAdditions.get(ridge));
+//      }
+//    }
+//  }
 //  public void equate(Edge e1, Edge e2) {
 //    Optional<Map<Polytope, Polytope>> ways = e1.waysToEquate(e2).findAny();
 //  if (!ways.isPresent()) {
@@ -673,16 +735,24 @@ public class Polytope {
   }
   
   public void check() {
+    check(true);
+  }
+  public void check(boolean topLevel) {
     for (Polytope facet: facets) {
       if (facet.n != n-1) {
         throw new IllegalArgumentException("Invalid dimensionality");
       }
-      facet.check();
+      facet.check(false);
     }
     Map<Polytope, Set<Polytope>> ridgeToFacetMap = getRidgeToFacetMap();
     for (Polytope ridge: ridgeToFacetMap.keySet()) {
       if (ridgeToFacetMap.get(ridge).size() > 2) {
-        throw new IllegalArgumentException("More than two facets around a ridge?!");
+        throw new IllegalArgumentException("Not two facets around a ridge?!");
+      }
+    }
+    if (!topLevel) {
+      if (!ridgeToFacetMap.keySet().equals(ridgeAngles.keySet())) {
+        throw new IllegalArgumentException("Component angles not set");
       }
     }
   }

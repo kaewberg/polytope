@@ -44,7 +44,7 @@ class WorkInProgress extends Polytope {
         throw new IllegalArgumentException("facet does not contain corner");
       }
       double angle = facet.getAngle(corner).getAngle();
-      if (angularSum + angle > 2 * PI) {
+      if (angularSum + angle > 2 * PI - 0.000001) {
         return false;
       }
       ridges.add(ridge);
@@ -68,7 +68,7 @@ class WorkInProgress extends Polytope {
       if (facets.size() < 3) {
         return false;
       }
-      // All ways to equate the two unconnected ridges 
+      // All ways to equate the two unconnected ridges
       Optional<Equivalences> equivalences = lastRidge().waysToEquate(firstRidge())
         // Such that the common corner is fixed
         .filter(eqv -> deepEquivalent(eqv.p1p2, corner))
@@ -77,23 +77,33 @@ class WorkInProgress extends Polytope {
       if (!equivalences.isPresent()) {
         return false;
       }
-      // We must not equate any corners that are already part of a single solved facet
+      // We must not equate any corners that are already part of a single ridge
+      // Or ridges in same facet etc
       Map<Polytope, Polytope> p1p2 = equivalences.get().p1p2;
       for (Polytope p1: p1p2.keySet()) {
         Polytope p2 = p1p2.get(p1);
-        if (finishedCorners.values().stream()
-           .flatMap(chain -> chain.facets.stream())
-           .map(facet -> facet.stream().filter(p -> p.n == n-2).collect(Collectors.toSet()))
-           .anyMatch(corners -> corners.contains(p1) && corners.contains(p2))) {
-          System.out.println("Skipping equate, would destroy other facet");
+        if (p1 != p2 && stream().anyMatch(component -> component.facets.contains(p1) && component.facets.contains(p2))) {
+          System.out.println("Skipping equate, would destroy component ");
           return false;
         }
       }
+      
 //      FacetChain before = copyWorkInProgress();
-      WorkInProgress.this.check();
-      for (Polytope facet: facets) {
-        facet.equate(equivalences.get().p1p2);
+      String before;
+      if (DEBUG) {
+        before = WorkInProgress.this.toString();
       }
+      WorkInProgress.this.check();
+      if (WorkInProgress.this.equate(equivalences.get().p1p2) != WorkInProgress.this && DEBUG) {
+        throw new IllegalArgumentException("Should not happen (TM)");
+      }
+      this.equate(equivalences.get().p1p2);
+//      for (Polytope facet: WorkInProgress.this.facets) {
+//        facet.equate(equivalences.get().p1p2);
+//      }
+//      for (Polytope finishedCorner: WorkInProgress.this.finishedCorners.keySet()) {
+//        chain.equate(equivalences.get().p1p2);
+//      }
       WorkInProgress.this.check();
       return true;
     }
@@ -172,12 +182,39 @@ class WorkInProgress extends Polytope {
       String names = this.facets.stream().map(facet -> facet.getName()).collect(Collectors.toList()).toString();
       return corner.toString().trim() + ' ' + names;
     }
+    public FacetChain equate(Map<Polytope, Polytope> equivalences) {
+      corner = corner.equate(equivalences);
+      for (int i = 0; i < facets.size(); i++) {
+        Polytope replacement = facets.get(i).equate(equivalences);
+        if (replacement != facets.get(i)) {
+          facets.remove(i);
+          facets.add(i, replacement);
+        }
+      }
+      for (int i = 0; i < ridges.size(); i++) {
+        Polytope replacement = ridges.get(i).equate(equivalences);
+        if (replacement != ridges.get(i)) {
+          ridges.remove(i);
+          ridges.add(i, replacement);
+        }
+      }
+      return this;
+    }
 
   }
   public Map<Polytope, FacetChain> finishedCorners = new HashMap<Polytope, FacetChain>();
   
   public WorkInProgress(int n) {
     super(n);
+  }
+  
+  @Override
+  public Polytope equate(Map<Polytope, Polytope> equivalences) {
+    Map<Polytope, FacetChain> newFinishedCorners = new HashMap<Polytope, FacetChain>();
+    for (Polytope finishedCorner: finishedCorners.keySet()) {
+      newFinishedCorners.put(finishedCorner.equate(equivalences), finishedCorners.get(finishedCorner).equate(equivalences));
+    }
+    return super.equate(equivalences);
   }
   // Check that polytope maps to itself in an equivalence map, as well as all subpolytopes
   public static boolean deepEquivalent(Map<Polytope, Polytope> equivalences, Polytope p) {
@@ -454,6 +491,15 @@ class WorkInProgress extends Polytope {
     finishedCorners.values().stream().filter(chain -> chain.facets.size() == 3).forEach(chain -> solve3(chain));
     // Then, a stab at solving remaining corners using above angles
     finishedCorners.values().stream().filter(chain -> chain.facets.size() == 4).forEach(chain -> solve4(chain));
+    if (DEBUG) {
+      Set<Polytope> ridges = stream().filter(ridge -> ridge.n == n-2).collect(Collectors.toSet());
+      Set<Polytope> ridgesWithAngles = new HashSet<Polytope>(ridgeAngles.keySet());
+      if (!ridges.equals(ridgesWithAngles)) {
+        System.out.println("Don't know how to solve the angles for this one, fix it, lazy programmer!");
+        System.out.println(this);
+        return false;
+      }
+    }
     validate();
     return true;
   }

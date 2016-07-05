@@ -92,6 +92,10 @@ public class Edge extends Polytope {
       Vertex othersVertex = (Vertex) equivalences.p1p2.get(v1);
       Edge otherEdge = (Edge) other.getComponent(
           e -> !equivalences.p2p1.containsKey(e) && e.facets.contains(othersVertex));
+      if (otherEdge == null) {
+        // Slightly suspect, I don't fully understand when this happens
+        return false;
+      }
       Iterator<Polytope> it2 = otherEdge.facets.iterator();
       Vertex v12 = (Vertex) it2.next();
       Vertex v22 = (Vertex) it2.next();

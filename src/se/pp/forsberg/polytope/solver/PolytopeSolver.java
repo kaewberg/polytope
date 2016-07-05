@@ -122,8 +122,9 @@ public class PolytopeSolver {
   Pattern facetDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)(@\\d+)?((\\s+(\\w+)-(\\d+)(@\\d+)?)*)");
   Pattern facetDefinition2 = Pattern.compile("\\s+(\\w+)-(\\d+)(@\\d+)?");
   Pattern angleDefinition = Pattern.compile("^\\s+v(\\d+) (.*)");
-  Pattern partialRidgeDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?$");
-  Pattern ridgeAngleDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?\\sv(\\d+)");
+//  Pattern partialRidgeDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?$");
+//  Pattern ridgeAngleDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?\\sv(\\d+)");
+  Pattern ridgeAngleDefinition = Pattern.compile("^\\s+(\\w+)-(\\d+)(@\\d+)?\\s+(\\w+)-(\\d+)(@\\d+)?\\s+v(\\d+)");
   Pattern rationalPi = Pattern.compile("^(\\d*)PI(/(\\d+))?$");
   Pattern rationalAcos = Pattern.compile("^(\\d+\\*)?acos\\((\\d+)/(\\d+)\\)$");
   Pattern startingPointDefinition = Pattern.compile("^Currently trying");
@@ -239,8 +240,9 @@ public class PolytopeSolver {
     T p = clazz.getConstructor(int.class).newInstance(n);
     p.setId(id);
     p.setName(name);
-    Map<String, List<Polytope>> facets = new HashMap<String, List<Polytope>>();
-    Map<String, List<Polytope>> ridges = new HashMap<String, List<Polytope>>();
+    Map<String, Polytope> components = new HashMap<String, Polytope>();
+    Map<Polytope, List<Polytope>> facetToPolytopeMap = new HashMap<Polytope, List<Polytope>>();
+//    Map<String, List<Polytope>> ridges = new HashMap<String, List<Polytope>>();
     while ((line = line(in, lineNumber)) != null && !line.startsWith("-----")) {
       match = facetDefinition.matcher(line);
       if (!match.matches()) {
@@ -248,35 +250,77 @@ public class PolytopeSolver {
       }
       String facetName = match.group(1);
       int facetId = Integer.parseInt(match.group(2));
+      String fullName = facetName + "-" + facetId;
       String ridgeList = match.group(4);
-      Polytope facet = get(facetName).copy();
-      Map<String, List<Polytope>> facetRidges = new HashMap<String, List<Polytope>>();
-      for (Polytope ridge: facet.facets) {
-        safeAdd(facetRidges, ridge.getName(), ridge);
-      }
-      Map<Polytope, Polytope> equivalences = new HashMap<Polytope, Polytope>();
-      match = facetDefinition2.matcher(ridgeList);
-//      int c = match.groupCount();
-//      for (int i = 0; i <= match.groupCount(); i++) {
-//        System.out.println(match.group(i));
-//      }
-      int i = 0;
-      while (match.find()) {
-//      for (int i = 0; i < (match.groupCount()-2) / 3; i++) {
-        String ridgeName = match.group(1);
-        int ridgeId = Integer.parseInt(match.group(2));
-        Polytope oldRidge = safeGet(ridges, ridgeName, ridgeId);
-        if (oldRidge != null) {
-          equivalences.put(facetRidges.get(ridgeName).get(i), oldRidge);
-          // Won't do! We have to have a complete wayToEquate, and that can only be found by looking at all previously defined edges...
-        } else {
-          safePut(ridges, ridgeName, ridgeId, facetRidges.get(ridgeName).get(i));
+      
+      if (facetName.equals("Edge")) {
+        match = facetDefinition2.matcher(ridgeList);
+        if (!match.find()) {
+          throw new IllegalArgumentException("Edge needs two vertexes");
         }
-        i++;
+        String vertexName = match.group(1);
+        int vertexId = Integer.parseInt(match.group(2));
+        String fullVertexName = vertexName + "-" + vertexId;
+        if (!vertexName.equals("Vertex")) {
+          throw new IllegalArgumentException("Edge needs two vertexes");
+        }
+        Vertex v1 = (Vertex) components.get(fullVertexName); 
+        if (v1 == null) {
+          v1 = copyVertex();
+          components.put(fullVertexName, v1);
+        }
+        if (!match.find()) {
+          throw new IllegalArgumentException("Edge needs two vertexes");
+        }
+        vertexName = match.group(1);
+        vertexId = Integer.parseInt(match.group(2));
+        fullVertexName = vertexName + "-" + vertexId;
+        if (!vertexName.equals("Vertex")) {
+          throw new IllegalArgumentException("Edge needs two vertexes");
+        }
+        Vertex v2 = (Vertex) components.get(fullVertexName); 
+        if (v2 == null) {
+          v2 = copyVertex();
+          components.put(fullVertexName, v2);
+        }
+        if (match.find()) {
+          throw new IllegalArgumentException("Edge needs two vertexes");
+        }
+        Edge edge = new Edge(v1, v2);
+        components.put(fullName, edge);
+        if (n == 2) {
+          p.add(edge);
+          safeAdd(facetToPolytopeMap, edge, p);
+        }
+      } else {
+        Polytope prototype = get(facetName);
+        int dimension = prototype.n;
+        Polytope component = new Polytope(dimension);
+        component.setId(prototype.id);
+        component.setName(prototype.getName());
+        match = facetDefinition2.matcher(ridgeList);
+      
+        while (match.find()) {
+          String ridgeName = match.group(1);
+          int ridgeId = Integer.parseInt(match.group(2));
+          String fullRidgeName = ridgeName + "-" + ridgeId;
+          int n2 = get(ridgeName).n;
+          if (n2 != dimension-1) {
+            throw new IllegalArgumentException("Wrong dimensionality");
+          }
+          Polytope ridge = components.get(fullRidgeName);
+          if (ridge == null) {
+            throw new IllegalArgumentException("Undefined polytope " + fullRidgeName);
+          }
+          component.add(ridge);
+          safeAdd(facetToPolytopeMap, ridge, component);
+        }
+        components.put(fullName, component);
+        if (component.n == n-1) {
+          p.add(component);
+          safeAdd(facetToPolytopeMap, component, p);
+        }
       }
-      facet.equate(equivalences);
-      safePut(facets, facetName, facetId, facet);
-      p.add(facet);
     }
     while (line != null && !line.startsWith("-----")) {
       match = angleDefinition.matcher(line);
@@ -304,42 +348,62 @@ public class PolytopeSolver {
       line = line(in, lineNumber);
     }
     while (line != null && !line.startsWith("-----")) {
-      match = partialRidgeDefinition.matcher(line);
-      if (!match.matches()) {
+//      match = partialRidgeDefinition.matcher(line);
+//      if (!match.matches()) {
         match = ridgeAngleDefinition.matcher(line);
         if (!match.matches()) {
           break;
         }
-        String ridgeName = match.group(1);
-        int ridgeId = Integer.parseInt(match.group(2));
-        String facetName1 = match.group(4);
-        int facetId1 = Integer.parseInt(match.group(5));
-        String facetName2 = match.group(7);
-        int facetId2 = Integer.parseInt(match.group(8));
-        int angleId = Integer.parseInt(match.group(10));
-        Polytope ridge = safeGet(ridges, ridgeName, ridgeId);
-        Polytope facet1 = safeGet(facets, facetName1, facetId1);
-        Polytope facet2 = safeGet(facets, facetName2, facetId2);
-        if (angles.size() <= angleId) {
-          angles.add(angleId, new Angle.Unknown());
-        }
-        Angle angle = angles.get(angleId);
-        if (ridge == null) {
-          throw new IOException("Line " + lineNumber[0] + ": Undefined ridge " + ridgeName + "-" + ridgeId + " in " + line);
-        }
+        String facetName1 = match.group(1);
+        int facetId1 = Integer.parseInt(match.group(2));
+        Polytope facet1 = components.get(facetName1 + "-" + facetId1);
+        String facetName2 = match.group(4);
+        int facetId2 = Integer.parseInt(match.group(5));
+        Polytope facet2 = components.get(facetName2 + "-" + facetId2);
         if (facet1 == null) {
           throw new IOException("Line " + lineNumber[0] + ": Undefined facet " + facetName1 + "-" + facetId1 + " in " + line);
         }
         if (facet2 == null) {
           throw new IOException("Line " + lineNumber[0] + ": Undefined facet " + facetName2 + "-" + facetId2 + " in " + line);
         }
-        if (angle == null) {
-          throw new IOException("Line " + lineNumber[0] + ": Undefined angle v" + angleId + " in " + line);
+        int angleId = Integer.parseInt(match.group(7));
+        Angle angle = null;
+        if (angleId < angles.size()) {
+          angle = angles.get(angleId);
+        }        
+        if (angle == null || (angle instanceof Angle.Unknown)) {
+          line = line(in, lineNumber);
+          continue;
         }
-        if (!(angle instanceof Angle.Unknown)) {
-          p.setAngle(ridge, angle);
+        
+        Set<Polytope> polytopes = new HashSet<Polytope>(facetToPolytopeMap.get(facet1));
+        polytopes.retainAll(facetToPolytopeMap.get(facet2));
+        if (polytopes.isEmpty()) {
+          throw new IOException("Line " + lineNumber[0] + ": Nonexisting common polytope in " + line);
         }
-      }
+        Polytope polytope = polytopes.iterator().next();
+        Set<Polytope> ridges = new HashSet<Polytope>(facet1.facets);
+        ridges.retainAll(facet2.facets);
+        if (ridges.isEmpty()) {
+          throw new IOException("Line " + lineNumber[0] + ": Nonexisting common ridge in " + line);
+        }
+        
+        Polytope ridge = ridges.iterator().next();
+        polytope.setAngle(ridge, angle);
+////        
+////        Polytope ridge = safeGet(ridges, ridgeName, ridgeId);
+////        Polytope facet1 = safeGet(facets, facetName1, facetId1);
+////        Polytope facet2 = safeGet(facets, facetName2, facetId2);
+//        if (angles.size() <= angleId) {
+//          angles.add(angleId, new Angle.Unknown());
+//        }
+//        Angle angle = angles.get(angleId);
+//        
+//        
+//        if (!(angle instanceof Angle.Unknown)) {
+//          p.setAngle(ridge, angle);
+//        }
+//      }
       line = line(in, lineNumber);
     }
     return p;
@@ -390,7 +454,7 @@ public class PolytopeSolver {
     try (PrintStream out =  new PrintStream(spoolFile)) {
       Map<Angle, Integer> definedAngles = new HashMap<Angle, Integer>();
       List<Angle> angles  = new ArrayList<Angle>();
-      for (int i = 0; solvedByDimension.containsKey(i); i++) {
+      for (int i = 2; solvedByDimension.containsKey(i); i++) {
         for (Polytope p: solvedByDimension.get(i)) {
           StringBuilder stringBuilder = new StringBuilder();
           p.toString(stringBuilder, definedAngles, angles);
@@ -398,7 +462,9 @@ public class PolytopeSolver {
           out.println("----------------------------------------------");
         }
       }
-      out.println("Currently trying" + startingPoint);
+      StringBuilder stringBuilder = new StringBuilder();
+      startingPoint.p.toString(stringBuilder, definedAngles, angles);
+      out.println("Currently trying\r\n" + stringBuilder.toString());
     } catch (FileNotFoundException e) {
       System.err.println("Spool failure!");
       e.printStackTrace();
@@ -430,6 +496,7 @@ public class PolytopeSolver {
     nameToPolytopeMap.put(name, p);
     System.out.println("----------------------------------------------");
     System.out.println(p);
+    System.out.println("----------------------------------------------");
   }
 
 
@@ -612,6 +679,11 @@ public class PolytopeSolver {
   // Ways to complete a partially constructed polytope
   // General rule, whenever we return a stream of options based on a initial value,
   // we should return copies of the objects
+  // Problem: If we just attack a random unfinished vertex we WILL get into the
+  // situation that we are building infinite links of partially connected chains.
+  // We must order the unsolved vertexes to avoid this.
+  // Start with vertexes around first facet chain.
+  // For each chain added, add new vertexes LAST.
   private Stream<WorkInProgress> waysToSolve(WorkInProgress p) {
     
     // Select a random unfinished corner 
@@ -668,7 +740,9 @@ public class PolytopeSolver {
       Set<Polytope> ridges = new HashSet<Polytope>(openFacet.facets);
       ridges.retainAll(neighborRidges);
       Polytope ridge = ridges.iterator().next();
-      facetChain.add(ridge, openFacet);
+      if (!facetChain.add(ridge, openFacet)) {
+        throw new IllegalArgumentException("Really shouldn't happen");
+      }
     } else {
       // Choose ridge not in neighborRidges containing corner
       // Just a minute! neighborRidges is all ridges containing corner??
@@ -696,14 +770,19 @@ public class PolytopeSolver {
         }
         ridge1 = maybeRidge.get();
       }
-      facetChain.add(ridge1, openFacet);
+      if (!facetChain.add(ridge1, openFacet)) {
+        throw new IllegalArgumentException("Really shouldn't happen");
+      }
       // Then follow facetToFacet map
       Polytope lastFacet = openFacet;
       Polytope facet;
       while ((facet = getOther(facetToFacetMap, lastFacet, nextToLastFacet)) != null && facet != openFacet)  {
         Set<Polytope> ridges = new HashSet<Polytope>(lastFacet.facets);
         ridges.retainAll(facet.facets);
-        facetChain.add(ridges.iterator().next(), facet);
+        if (!facetChain.add(ridges.iterator().next(), facet)) {
+          // More than 2PI around this corner already, abort and backtrack
+          return Stream.empty();
+        }
         nextToLastFacet = lastFacet;
         lastFacet = facet;
       }
@@ -779,6 +858,8 @@ public class PolytopeSolver {
         waysToSelect1(facet.n).flatMap(
             newFacet -> facet.waysToConnect(newFacet, lastRidge).flatMap(
                 equivalences -> {
+//                  for (lastRidge.facets)
+//                  if (facetChain.angularSum + )
                   Polytope facetDbg = facet;
                   Polytope newFacetDbg = newFacet;
                   Polytope lastRidgeDbg = lastRidge;
@@ -790,7 +871,9 @@ public class PolytopeSolver {
 //                  Equivalences orgEqv = new Equivalences(equivalences);
 //                  Polytope newFacetCopy = newFacet.copy(equivalences.p2p1);
 //                  result.add(lastRidge, newFacetCopy);
-                  result.add(replacements.get(lastRidge), newFacetCopy);
+                  if (!result.add(replacements.get(lastRidge), newFacetCopy)) {
+                    return Stream.empty();
+                  }
 //                  return result;
                   result.getWorkInProgress().check();
                   return waysToComplete(result);

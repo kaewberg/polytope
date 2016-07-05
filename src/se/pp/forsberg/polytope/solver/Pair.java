@@ -1,6 +1,8 @@
 package se.pp.forsberg.polytope.solver;
 
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.Iterator;
 
 public class Pair<T> {
   public final T t1;
@@ -11,6 +13,15 @@ public class Pair<T> {
     this.t2 = t2;
   }
   
+  public Pair(Collection<T> c) {
+    if (c.size() != 2) {
+      throw new IllegalArgumentException("Bad pair, not 2");
+    }
+    Iterator<T> it = c.iterator();
+    t1 = it.next();
+    t2 = it.next();
+  }
+
   public T getFirst(Comparator<T> comparator) {
     if (comparator.compare(t1, t2) <= 0) {
       return t1;
